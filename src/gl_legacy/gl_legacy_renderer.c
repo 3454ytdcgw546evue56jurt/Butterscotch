@@ -8,7 +8,7 @@
 #include "rsxutil.h"
 GLAPI void GLAPIENTRY glActiveTexture( GLenum texture ) {};
 #else
-#include <glad/glad.h>
+#include <SDL/SDL_opengl.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>

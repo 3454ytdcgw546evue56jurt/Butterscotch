@@ -6,7 +6,7 @@
 #include "ps3gl.h"
 #include "rsxutil.h"
 #else
-#include <glad/glad.h>
+#include <SDL/SDL_opengl.h>
 #endif
 
 // ===[ GLLegacyRenderer Struct ]===

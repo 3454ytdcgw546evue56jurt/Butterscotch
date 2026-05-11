@@ -2072,7 +2072,7 @@ static void handleCallV(VMContext* ctx, uint32_t instr) {
 #endif
         result = RValue_makeUndefined();
     } else {
-        fprintf(stderr, "VM: [%s] CALLV with unresolvable function reference (type=%d, codeIndex=%d)\n", ctx->currentCodeName, function.type, codeIndex);
+        //fprintf(stderr, "VM: [%s] CALLV with unresolvable function reference (type=%d, codeIndex=%d)\n", ctx->currentCodeName, function.type, codeIndex);
         result = RValue_makeUndefined();
     }
 

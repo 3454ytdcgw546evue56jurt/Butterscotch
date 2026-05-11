@@ -336,6 +336,7 @@ static const BuiltinVarEntry BUILTIN_VAR_TABLE[] = {
     { "view_angle", BUILTIN_VAR_VIEW_ANGLE },
     { "view_camera", BUILTIN_VAR_CAMERA_VIEW },
     { "view_current", BUILTIN_VAR_VIEW_CURRENT },
+    { "view_enabled", BUILTIN_VAR_VIEW_ENABLED },
     { "view_hborder", BUILTIN_VAR_VIEW_HBORDER },
     { "view_hport", BUILTIN_VAR_VIEW_HPORT },
     { "view_hspeed", BUILTIN_VAR_VIEW_HSPEED },
@@ -669,10 +670,15 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
 
         // View properties
         case BUILTIN_VAR_VIEW_CURRENT:
-        case BUILTIN_VAR_CAMERA_VIEW:
             return RValue_makeReal((GMLReal) runner->viewCurrent);
+        case BUILTIN_VAR_CAMERA_VIEW:
+            if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) return RValue_makeReal((GMLReal) arrayIndex);
+            return RValue_makeReal(0.0);
         case BUILTIN_VAR_VIEW_XVIEW:
             if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) return RValue_makeReal((GMLReal) runner->views[arrayIndex].viewX);
+            return RValue_makeReal(0.0);
+        case BUILTIN_VAR_VIEW_ENABLED:
+            if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) return RValue_makeReal((GMLReal) runner->views[arrayIndex].enabled);
             return RValue_makeReal(0.0);
         case BUILTIN_VAR_VIEW_YVIEW:
             if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) return RValue_makeReal((GMLReal) runner->views[arrayIndex].viewY);
@@ -1170,6 +1176,8 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
             return;
 
         // View properties
+        case BUILTIN_VAR_VIEW_ENABLED:
+            if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) runner->views[arrayIndex].enabled = RValue_toBool(val);
         case BUILTIN_VAR_VIEW_XVIEW:
             if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) runner->views[arrayIndex].viewX = RValue_toInt32(val);
             return;
@@ -6482,6 +6490,10 @@ static RValue builtinSurfaceGetHeight(VMContext* ctx, RValue* args, MAYBE_UNUSED
     return RValue_makeReal(0.0);
 }
 
+static RValue builtinSurfaceGetTarget(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    return RValue_makeInt32(-1);
+}
+
 // Sprite functions
 static RValue builtin_spriteAdd(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     logStubbedFunction(ctx, "sprite_add");
@@ -9125,6 +9137,13 @@ static RValue builtinGpuSetColorWriteEnable(VMContext* ctx, RValue* args, int32_
     return RValue_makeUndefined();
 }
 
+static RValue builtinFileFindFirst(VMContext* ctx, RValue* args, int32_t argCount) {
+    return RValue_makeString("");
+}
+
+STUB_RETURN_TRUE(gameframe_has_native_extension)
+STUB_RETURN_TRUE(ds_queue_empty)
+
 // ===[ REGISTRATION ]===
 
 void VMBuiltins_registerAll(VMContext* ctx) {
@@ -9135,6 +9154,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
 
     // Core output
     VM_registerBuiltin(ctx, "show_debug_message", builtinShowDebugMessage);
+    VM_registerBuiltin(ctx, "ds_queue_empty", builtin_ds_queue_empty);
 
     // String functions
     VM_registerBuiltin(ctx, "string_length", builtinStringLength);
@@ -9376,6 +9396,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "file_text_read_string", builtinFileTextReadString);
     VM_registerBuiltin(ctx, "file_text_read_real", builtinFileTextReadReal);
     VM_registerBuiltin(ctx, "file_text_readln", builtinFileTextReadln);
+    VM_registerBuiltin(ctx, "file_find_first", builtinFileFindFirst);
+    VM_registerBuiltin(ctx, "gameframe_has_native_extension", builtin_gameframe_has_native_extension);
 
     // Keyboard
     VM_registerBuiltin(ctx, "keyboard_check", builtinKeyboardCheck);
@@ -9544,6 +9566,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "surface_exists", builtin_surface_exists);
     VM_registerBuiltin(ctx, "surface_get_width", builtinSurfaceGetWidth);
     VM_registerBuiltin(ctx, "surface_get_height", builtinSurfaceGetHeight);
+    VM_registerBuiltin(ctx, "surface_get_target", builtinSurfaceGetTarget);
     VM_registerBuiltin(ctx, "surface_resize", builtin_surface_resize);
     VM_registerBuiltin(ctx, "surface_copy", builtin_surface_copy);
     VM_registerBuiltin(ctx, "surface_copy_part", builtin_surface_copy_part);
