@@ -16,6 +16,11 @@
 
 static struct ps3gl_opengl_state _opengl_state;
 
+static inline struct ps3gl_texture* activeBoundTex(void)
+{
+	return _opengl_state.bound_textures[_opengl_state.active_texture_unit];
+}
+
 u32 fp_offset;
 u32 *fp_buffer;
 
@@ -163,7 +168,7 @@ void glEnable( GLenum cap )
 			_opengl_state.fog_enabled = true;
 			break;
 		case GL_TEXTURE_2D:
-			_opengl_state.texture0_enabled = true;
+			_opengl_state.texture_unit_enabled[_opengl_state.active_texture_unit] = true;
 			break;
 		case GL_SCISSOR_TEST:
 			_opengl_state.scissor.enabled = true;
@@ -190,7 +195,7 @@ GLboolean glIsEnabled( GLenum cap )
 		case GL_FOG:
 			return _opengl_state.fog_enabled;
 		case GL_TEXTURE_2D:
-			return _opengl_state.texture0_enabled;
+			return _opengl_state.texture_unit_enabled[_opengl_state.active_texture_unit];
 		case GL_SCISSOR_TEST:
 			return _opengl_state.scissor.enabled;
 		default:
@@ -221,7 +226,7 @@ void glDisable( GLenum cap )
 			_opengl_state.fog_enabled = false;
 			break;
 		case GL_TEXTURE_2D:
-			_opengl_state.texture0_enabled = false;
+			_opengl_state.texture_unit_enabled[_opengl_state.active_texture_unit] = false;
 			break;
 		case GL_SCISSOR_TEST:
 			_opengl_state.scissor.enabled = false;
@@ -664,49 +669,49 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 				switch(param)
 				{
 					case GL_NEAREST:
-						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST;
+						activeBoundTex()->minFilter = GCM_TEXTURE_NEAREST;
 						break;
 					case GL_LINEAR:
-						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_LINEAR;
+						activeBoundTex()->minFilter = GCM_TEXTURE_LINEAR;
 						break;
 					case GL_NEAREST_MIPMAP_NEAREST:
-						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_NEAREST;
+						activeBoundTex()->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_NEAREST;
 						break;
 					case GL_LINEAR_MIPMAP_NEAREST:
-						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_NEAREST;
+						activeBoundTex()->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_NEAREST;
 						break;
 					case GL_NEAREST_MIPMAP_LINEAR:
-						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
+						activeBoundTex()->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
 						break;
 					case GL_LINEAR_MIPMAP_LINEAR:
-						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_LINEAR;
+						activeBoundTex()->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_LINEAR;
 						break;
 					
 				}
 				break;
 		case GL_TEXTURE_MAG_FILTER:
 			if(param == GL_NEAREST) 
-				_opengl_state.bound_texture->magFilter = GCM_TEXTURE_NEAREST;
+				activeBoundTex()->magFilter = GCM_TEXTURE_NEAREST;
 			if(param == GL_LINEAR) 
-				_opengl_state.bound_texture->magFilter = GCM_TEXTURE_LINEAR;
+				activeBoundTex()->magFilter = GCM_TEXTURE_LINEAR;
 			break;
 		case GL_TEXTURE_WRAP_S:
 			switch(param)
 			{
 				case GL_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
+					activeBoundTex()->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				case GL_CLAMP_TO_BORDER:
-					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_CLAMP_TO_BORDER;
+					activeBoundTex()->wrapS = GCM_TEXTURE_CLAMP_TO_BORDER;
 					break;
 				case GL_MIRRORED_REPEAT:
-					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_MIRRORED_REPEAT;
+					activeBoundTex()->wrapS = GCM_TEXTURE_MIRRORED_REPEAT;
 					break;
 				case GL_REPEAT:
-					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_REPEAT;
+					activeBoundTex()->wrapS = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
+					activeBoundTex()->wrapS = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
 					break;
 				}
 			break;
@@ -714,19 +719,19 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 			switch(param)
 			{
 				case GL_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
+					activeBoundTex()->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				case GL_CLAMP_TO_BORDER:
-					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_CLAMP_TO_BORDER;
+					activeBoundTex()->wrapT = GCM_TEXTURE_CLAMP_TO_BORDER;
 					break;
 				case GL_MIRRORED_REPEAT:
-					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_MIRRORED_REPEAT;
+					activeBoundTex()->wrapT = GCM_TEXTURE_MIRRORED_REPEAT;
 					break;
 				case GL_REPEAT:
-					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_REPEAT;
+					activeBoundTex()->wrapT = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
+					activeBoundTex()->wrapT = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
 					break;
 			}
 			break;
@@ -734,19 +739,19 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 			switch(param)
 			{
 				case GL_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
+					activeBoundTex()->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				case GL_CLAMP_TO_BORDER:
-					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_CLAMP_TO_BORDER;
+					activeBoundTex()->wrapR = GCM_TEXTURE_CLAMP_TO_BORDER;
 					break;
 				case GL_MIRRORED_REPEAT:
-					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_MIRRORED_REPEAT;
+					activeBoundTex()->wrapR = GCM_TEXTURE_MIRRORED_REPEAT;
 					break;
 				case GL_REPEAT:
-					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_REPEAT;
+					activeBoundTex()->wrapR = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
+					activeBoundTex()->wrapR = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
 					break;
 			}
 			break;
@@ -767,12 +772,12 @@ void glTexImage2D( GLenum target, GLint level,
                    GLint border, GLenum format, GLenum type,
                    const GLvoid *pixels )
 {
-	if (_opengl_state.bound_texture == NULL)
+	if (activeBoundTex() == NULL)
 		return;
 
 	if(pixels == NULL) return;
 
-	struct ps3gl_texture *currentTexture = _opengl_state.bound_texture;
+	struct ps3gl_texture *currentTexture = activeBoundTex();
 	currentTexture->gcmTexture.width = width;
 	currentTexture->gcmTexture.height = height;
 	currentTexture->gcmTexture.depth = 1;
@@ -782,14 +787,14 @@ void glTexImage2D( GLenum target, GLint level,
 	switch(target)
 		{
 			case GL_TEXTURE_1D:
-				_opengl_state.bound_texture->gcmTexture.dimension = GCM_TEXTURE_DIMS_1D;
+				activeBoundTex()->gcmTexture.dimension = GCM_TEXTURE_DIMS_1D;
 				break;
 			default:
 			case GL_TEXTURE_2D:
-				_opengl_state.bound_texture->gcmTexture.dimension = GCM_TEXTURE_DIMS_2D;
+				activeBoundTex()->gcmTexture.dimension = GCM_TEXTURE_DIMS_2D;
 				break;
 			case GL_TEXTURE_3D:
-				_opengl_state.bound_texture->gcmTexture.dimension = GCM_TEXTURE_DIMS_3D;
+				activeBoundTex()->gcmTexture.dimension = GCM_TEXTURE_DIMS_3D;
 				break;
 		}
 
@@ -799,6 +804,10 @@ void glTexImage2D( GLenum target, GLint level,
 		case GL_RGBA:
 		case 4:
 			currentTexture->gcmTexture.pitch = width*4;
+			break;
+		case GL_RED:
+		case 1:
+			currentTexture->gcmTexture.pitch = width; // one byte per texel
 			break;
 	}
 
@@ -852,6 +861,34 @@ void glTexImage2D( GLenum target, GLint level,
 			);
 			break;
 		}
+		case GL_RED:
+		{
+			if (type != GL_UNSIGNED_BYTE) {
+				printf("GL_RED: only GL_UNSIGNED_BYTE supported, got %u\n", type);
+				return;
+			}
+			if (currentTexture->data != NULL)
+				rsxFree(currentTexture->data);
+			const int textureSize = width * height; // one byte per texel
+			currentTexture->data = (uint8_t*)rsxMemalign(128, textureSize);
+			memcpy((void*)currentTexture->data, pixels, textureSize);
+			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
+			// RSX stores B8 in the blue source channel.
+			// Remap so the shader reads (byte, 0, 0, 1) to match GL_RED's spec semantic.
+			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_B8 | GCM_TEXTURE_FORMAT_LIN;
+			currentTexture->gcmTexture.remap  = (
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_ZERO  << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_ZERO  << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_ONE   << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
+						   // For .r output, select B8's only populated channel (blue).
+						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_B_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT)
+			);
+			break;
+		}
 		default:
 			printf("Unimplemented Texture Format %u\n!!!!!!", format);
 	}
@@ -866,10 +903,10 @@ void glTexSubImage2D(
 )
 {
 	
-	if (_opengl_state.bound_texture == NULL)
+	if (activeBoundTex() == NULL)
 		return;
 
-	struct ps3gl_texture *currentTexture = _opengl_state.bound_texture;
+	struct ps3gl_texture *currentTexture = activeBoundTex();
 	if(currentTexture->target != target) return;
 
 	uint8_t *transferBuffer = NULL;
@@ -964,7 +1001,14 @@ void glBindTexture( GLenum target, GLuint texture )
         _opengl_state.textures[texture].gcmTexture.cubemap = (target == GL_TEXTURE_CUBE_MAP);
     }
 
-    _opengl_state.bound_texture = &_opengl_state.textures[texture];
+    _opengl_state.bound_textures[_opengl_state.active_texture_unit] = &_opengl_state.textures[texture];
+}
+
+void glActiveTexture(GLenum texture)
+{
+	GLuint unit = (GLuint)(texture - GL_TEXTURE0);
+	if (unit >= MAX_TEX_UNITS) return;
+	_opengl_state.active_texture_unit = unit;
 }
 
 /*
@@ -1155,6 +1199,11 @@ void glDetachShader(GLuint program, GLuint shader)
 	p->linked = false;
 }
 
+// cgcomp's eparams enum (PSL1GHT/tools/cgcomp/include/parser.h) packs sampler types into the range PARAM_SAMPLER1D..PARAM_SAMPLERSHADOWRECT == 14..21.
+// These values are baked into every compiled .fpo and effectively stable.
+#define PS3GL_PARAM_SAMPLER_FIRST 14
+#define PS3GL_PARAM_SAMPLER_LAST  21
+
 void glLinkProgram(GLuint program)
 {
 	struct ps3gl_program *p = lookupProgram(program);
@@ -1170,6 +1219,35 @@ void glLinkProgram(GLuint program)
 	}
 
 	p->uniformCount = 0;
+
+	// The OpenGL spec says that samplers default to texture unit 0 at program creation.
+	// To match this behavior, we'll prepopulate all sampler attribs to 0 to avoid unforeseen consequences.
+	if (fs != NULL && fs->blob != NULL) {
+		rsxFragmentProgram *fp = (rsxFragmentProgram*) fs->blob;
+		u16 numAttr = rsxFragmentProgramGetNumAttrib(fp);
+		rsxProgramAttrib *attribs = rsxFragmentProgramGetAttribs(fp);
+		for (u16 i = 0; numAttr > i; i++) {
+			if (p->uniformCount >= MAX_PROGRAM_UNIFORMS)
+				break;
+			if (!attribs[i].name_off)
+				continue;
+			if (PS3GL_PARAM_SAMPLER_FIRST > attribs[i].type)
+				continue;
+			if (attribs[i].type > PS3GL_PARAM_SAMPLER_LAST)
+				continue;
+
+			const char *name = ((const char*) fp) + attribs[i].name_off;
+			struct ps3gl_program_uniform *u = &p->uniforms[p->uniformCount];
+			strncpy(u->name, name, sizeof(u->name) - 1);
+			u->name[sizeof(u->name) - 1] = '\0';
+			u->stage = PS3GL_LOC_STAGE_FP;
+			u->constHandle = NULL;
+			u->samplerUnit = 0;
+			u->samplerAttrib = &attribs[i];
+			p->uniformCount++;
+		}
+	}
+
 	p->linked = true;
 }
 
@@ -1214,6 +1292,8 @@ static GLint resolveUniform(struct ps3gl_program *p, const GLchar *name)
 	struct ps3gl_shader *vs = lookupShader(p->vertexShader);
 	struct ps3gl_shader *fs = lookupShader(p->fragmentShader);
 
+	// Samplers are pre-populated by glLinkProgram, so they'll always hit the cache above.
+	// Only non-sampler FP consts need lazy resolution here.
 	if (fs != NULL && fs->blob != NULL) {
 		rsxFragmentProgram *fp = (rsxFragmentProgram*)fs->blob;
 		rsxProgramConst *c = rsxFragmentProgramGetConst(fp, (char*)name);
@@ -1225,18 +1305,6 @@ static GLint resolveUniform(struct ps3gl_program *p, const GLchar *name)
 			u->constHandle = c;
 			u->samplerUnit = -1;
 			u->samplerAttrib = NULL;
-			return PS3GL_LOC_PACK(PS3GL_LOC_STAGE_FP, p->uniformCount++);
-		}
-		// Sampler attribs are not in the const table, they're attribs.
-		rsxProgramAttrib *a = rsxFragmentProgramGetAttrib(fp, (char*)name);
-		if (a != NULL) {
-			struct ps3gl_program_uniform *u = &p->uniforms[p->uniformCount];
-			strncpy(u->name, name, sizeof(u->name) - 1);
-			u->name[sizeof(u->name) - 1] = '\0';
-			u->stage = PS3GL_LOC_STAGE_FP;
-			u->constHandle = NULL;
-			u->samplerUnit = 0;
-			u->samplerAttrib = a;
 			return PS3GL_LOC_PACK(PS3GL_LOC_STAGE_FP, p->uniformCount++);
 		}
 	}
@@ -1385,43 +1453,62 @@ static void _program_exit_callback(void)
 	rsxFinish(context,1);
 }
 
-void _ps3gl_load_texture(void)
+// Bind a GL texture unit's currently-bound texture into the given RSX slot.
+static void _ps3gl_bind_unit_to_rsx_slot(GLuint glUnit, int rsxSlot)
 {
-	if((_opengl_state.texture0Unit == NULL || _opengl_state.bound_texture == NULL)) return;
+	struct ps3gl_texture *tex = _opengl_state.bound_textures[glUnit];
+	if (tex == NULL) return;
 
-	if(!_opengl_state.texture0_enabled) return;
-
-	const int tu0Index = _opengl_state.texture0Unit->index;
-	const gcmTexture *boundGCMTex = &_opengl_state.bound_texture->gcmTexture;
-
-	rsxInvalidateTextureCache(context,GCM_INVALIDATE_TEXTURE);
-	rsxLoadTexture(context, 
-		tu0Index, 
-		boundGCMTex
-	);
-	rsxTextureControl(context, 
-		tu0Index, 
+	rsxLoadTexture(context, rsxSlot, &tex->gcmTexture);
+	rsxTextureControl(context,
+		rsxSlot,
 		true,
-		0<<8,  // TODO: No idea if this is right for minLOD
-		12<<8, // TODO: No idea if this is right for maxLOD
-		GCM_TEXTURE_MAX_ANISO_16 // TODO: 1 or 16 for max AA?
+		0<<8,  // TODO: minLOD
+		12<<8, // TODO: maxLOD
+		GCM_TEXTURE_MAX_ANISO_16
 	);
-	rsxTextureFilter(context, 
-		tu0Index, 
+	rsxTextureFilter(context,
+		rsxSlot,
 		0,
-		_opengl_state.bound_texture->minFilter,
-		_opengl_state.bound_texture->magFilter,
-		GCM_TEXTURE_CONVOLUTION_QUINCUNX // TODO: Use QUICKUNX or NONE?
+		tex->minFilter,
+		tex->magFilter,
+		GCM_TEXTURE_CONVOLUTION_QUINCUNX
 	);
 	rsxTextureWrapMode(context,
-		tu0Index, 
-		_opengl_state.bound_texture->wrapS, 
-		_opengl_state.bound_texture->wrapT, 
-		_opengl_state.bound_texture->wrapR, 
+		rsxSlot,
+		tex->wrapS,
+		tex->wrapT,
+		tex->wrapR,
 		0,
-		GCM_TEXTURE_ZFUNC_LESS, // Texture Depth Func starts at 0, normal depth func starts at 0x200
+		GCM_TEXTURE_ZFUNC_LESS,
 		0
 	);
+}
+
+void _ps3gl_load_texture(void)
+{
+	rsxInvalidateTextureCache(context, GCM_INVALIDATE_TEXTURE);
+
+	if (_opengl_state.active_program == 0) {
+		// FFP path: single sampler, hardwired to GL unit 0.
+		if (_opengl_state.ffp_tex_unit == NULL) return;
+		if (!_opengl_state.texture_unit_enabled[0]) return;
+		_ps3gl_bind_unit_to_rsx_slot(0, _opengl_state.ffp_tex_unit->index);
+		return;
+	}
+
+	// Custom program: walk its cached sampler uniforms.
+	// samplerUnit (set by glUniform1i) is the GL-side unit index;
+	// samplerAttrib->index is the RSX slot pinned by Cg's : TEXUNITn semantic.
+	struct ps3gl_program *p = &_opengl_state.programs[_opengl_state.active_program];
+	for (GLuint i = 0; p->uniformCount > i; i++) {
+		struct ps3gl_program_uniform *u = &p->uniforms[i];
+		if (u->samplerAttrib == NULL) continue;
+		GLuint glUnit = (u->samplerUnit >= 0) ? (GLuint) u->samplerUnit : 0;
+		if (glUnit >= MAX_TEX_UNITS) continue;
+		if (!_opengl_state.texture_unit_enabled[glUnit]) continue;
+		_ps3gl_bind_unit_to_rsx_slot(glUnit, u->samplerAttrib->index);
+	}
 }
 
 void glGetFloatv(GLenum pname, GLfloat *params)
@@ -1579,7 +1666,7 @@ void _setup_draw_env(void)
 
 	if (ffpFp) {
 		// FFP FP: push its baked uniforms.
-		rsxSetFragmentProgramParameterBool(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled], _opengl_state.texture0_enabled, useFpOffset, GCM_LOCATION_RSX);
+		rsxSetFragmentProgramParameterBool(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled], _opengl_state.texture_unit_enabled[0], useFpOffset, GCM_LOCATION_RSX);
 		rsxSetFragmentProgramParameterBool(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_FogEnabled], _opengl_state.fog_enabled, useFpOffset, GCM_LOCATION_RSX);
 		rsxSetFragmentProgramParameterF32(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_TextureMode], _opengl_state.texEnvMode, useFpOffset, GCM_LOCATION_RSX);
 		rsxSetFragmentProgramParameterF32Vec4(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_FogColor],  _opengl_state.fog_color, useFpOffset, GCM_LOCATION_RSX);
@@ -1601,7 +1688,7 @@ void ps3glInit(void)
 
 	u32 fpsize = 0;
 	rsxFragmentProgramGetUCode(fpo, &fp_ucode, &fpsize);
-	_opengl_state.texture0Unit = rsxFragmentProgramGetAttrib(fpo, "uTextureUnit0");
+	_opengl_state.ffp_tex_unit = rsxFragmentProgramGetAttrib(fpo, "uTextureUnit0");
 	_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled] = rsxFragmentProgramGetConst(fpo, "uTextureEnabled");
 	_opengl_state.prog_consts[PS3GL_Uniform_TextureMode] = rsxFragmentProgramGetConst(fpo, "uTextureMode");
 
@@ -1659,15 +1746,19 @@ void ps3glInit(void)
 
 	// Textures
 	_opengl_state.nextTextureID = 1;
-    _opengl_state.bound_texture = &_opengl_state.textures[0];
-	_opengl_state.bound_texture->id = 0;
-	_opengl_state.bound_texture->allocated = true;
-	_opengl_state.bound_texture->data = NULL;
-	_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
-	_opengl_state.bound_texture->magFilter = GCM_TEXTURE_LINEAR;
-	_opengl_state.bound_texture->wrapS = GCM_TEXTURE_REPEAT;
-	_opengl_state.bound_texture->wrapT = GCM_TEXTURE_REPEAT;
-	_opengl_state.bound_texture->wrapR = GCM_TEXTURE_REPEAT;
+	_opengl_state.active_texture_unit = 0;
+	for (int u = 0; MAX_TEX_UNITS > u; u++) {
+		_opengl_state.bound_textures[u] = &_opengl_state.textures[0];
+		_opengl_state.texture_unit_enabled[u] = false;
+	}
+	activeBoundTex()->id = 0;
+	activeBoundTex()->allocated = true;
+	activeBoundTex()->data = NULL;
+	activeBoundTex()->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
+	activeBoundTex()->magFilter = GCM_TEXTURE_LINEAR;
+	activeBoundTex()->wrapS = GCM_TEXTURE_REPEAT;
+	activeBoundTex()->wrapT = GCM_TEXTURE_REPEAT;
+	activeBoundTex()->wrapR = GCM_TEXTURE_REPEAT;
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
 

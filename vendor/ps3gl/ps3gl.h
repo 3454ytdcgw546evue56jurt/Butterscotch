@@ -9,6 +9,9 @@ extern "C"
 void ps3glInit(void);
 void ps3glSwapBuffers(void);
 
+// Multi-texture-unit support. Pass GL_TEXTURE0..GL_TEXTURE3.
+void glActiveTexture(GLenum texture);
+
 #define GL_VERTEX_SHADER                0x8B31
 #define GL_FRAGMENT_SHADER              0x8B30
 #define GL_COMPILE_STATUS               0x8B81

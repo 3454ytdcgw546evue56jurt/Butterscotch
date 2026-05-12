@@ -24,6 +24,7 @@
 #define MAX_PROGRAMS 32
 #define MAX_PROGRAM_UNIFORMS 64
 #define MAX_PROGRAM_ATTRIBS 16
+#define MAX_TEX_UNITS 4
 
 // Pack uniform location: stage in high 8 bits, program-local index in low 24
 #define PS3GL_LOC_STAGE_VP 1
@@ -157,12 +158,13 @@ struct ps3gl_opengl_state
     VmathMatrix4 *curr_mtx;
 
 	// Textures
-	rsxProgramAttrib* texture0Unit;
-	GLboolean texture0_enabled;
+	rsxProgramAttrib* ffp_tex_unit;     // FFP fragment shader's sampler attrib (resolved at init)
 	GLuint blend_color_rsx;
-	GLfloat texEnvMode; 
+	GLfloat texEnvMode;
 	struct ps3gl_texture textures[MAX_TEXTURES];
-	struct ps3gl_texture *bound_texture;
+	struct ps3gl_texture *bound_textures[MAX_TEX_UNITS];
+	GLboolean texture_unit_enabled[MAX_TEX_UNITS];
+	GLuint active_texture_unit;         // index into bound_textures[]
 	GLuint nextTextureID;
 
 	// Lighting
