@@ -16,6 +16,7 @@
 #include "gl_legacy_renderer.h"
 #include "overlay_file_system.h"
 #include "ps3_overlay.h"
+#include "ps3_textures.h"
 #ifdef USE_OPENAL
 #include "al_audio_system.h"
 #endif
@@ -28,8 +29,8 @@
 // Paletted fragment shader.
 extern unsigned char paletted_fpo[];
 extern unsigned int  paletted_fpo_len;
-GLuint g_palettedProgram = 0;
-GLint  g_palettedUPaletteVLoc = -1;
+GLuint gPalettedProgram = 0;
+GLint  gPalettedUPaletteVLoc = -1;
 
 #include <io/pad.h>
 #include <sys/systime.h>
@@ -197,7 +198,8 @@ int main(int argc, char* argv[]) {
             .parseVari = true,
             .parseFunc = true,
             .parseStrg = true,
-            .parseTxtr = true,
+            // TXTR pages live in TEXTURES.BIN on PS3, not in data.win.
+            .parseTxtr = false,
             .parseAudo = true,
             .skipLoadingPreciseMasksForNonPreciseSprites = true,
             .lazyLoadRooms = true,
@@ -243,6 +245,19 @@ int main(int argc, char* argv[]) {
     ps3glInit();
     ioPadInit(7);
 
+    // Load TEXTURES.BIN
+    {
+        size_t dirLen = strlen(dataWinDir);
+        char* texturesBinPath = safeMalloc(dirLen + strlen("textures.bin") + 1);
+        memcpy(texturesBinPath, dataWinDir, dirLen);
+        strcpy(texturesBinPath + dirLen, "textures.bin");
+        if (!PS3Textures_init(texturesBinPath)) {
+            fprintf(stderr, "FATAL: failed to load %s\n", texturesBinPath);
+            return 1;
+        }
+        free(texturesBinPath);
+    }
+
     // Initialize the renderer
     Renderer* renderer = GLLegacyRenderer_create();
 
@@ -260,15 +275,15 @@ int main(int argc, char* argv[]) {
     {
         GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderBinary(1, &fs, PS3GL_SHADER_BINARY_FPO, paletted_fpo, (GLsizei) paletted_fpo_len);
-        g_palettedProgram = glCreateProgram();
-        glAttachShader(g_palettedProgram, fs);
-        glLinkProgram(g_palettedProgram);
-        g_palettedUPaletteVLoc = glGetUniformLocation(g_palettedProgram, "uPaletteV");
-        GLint uPaletteLoc = glGetUniformLocation(g_palettedProgram, "uPalette");
-        glUseProgram(g_palettedProgram);
+        gPalettedProgram = glCreateProgram();
+        glAttachShader(gPalettedProgram, fs);
+        glLinkProgram(gPalettedProgram);
+        gPalettedUPaletteVLoc = glGetUniformLocation(gPalettedProgram, "uPaletteV");
+        GLint uPaletteLoc = glGetUniformLocation(gPalettedProgram, "uPalette");
+        glUseProgram(gPalettedProgram);
         glUniform1i(uPaletteLoc, 1);
         glUseProgram(0);
-        printf("Paletted shader: program=%u uPaletteV=%d uPalette=%d\n", g_palettedProgram, g_palettedUPaletteVLoc, uPaletteLoc);
+        printf("Paletted shader: program=%u uPaletteV=%d uPalette=%d\n", gPalettedProgram, gPalettedUPaletteVLoc, uPaletteLoc);
     }
 
     // Initialize the runner

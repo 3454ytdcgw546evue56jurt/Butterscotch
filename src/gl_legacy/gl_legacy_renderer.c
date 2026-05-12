@@ -6,8 +6,31 @@
 #ifdef PLATFORM_PS3
 #include "ps3gl.h"
 #include "rsxutil.h"
+#include "ps3_textures.h"
+extern GLuint gPalettedProgram;
+extern GLint  gPalettedUPaletteVLoc;
+// Activate the paletted shader for a sprite draw. The caller has already bound the index texture (via glBindTexture on TEXUNIT0).
+// Sets unit 1 to the CLUT atlas and pushes uPaletteV for the TPAG's row.
+#define PS3_PALETTED_BEGIN(tpagIndex) do {                                                  \
+    float _v = PS3Textures_getTpagPaletteV(tpagIndex);                                      \
+    if (0.0f > _v) break;                                                                   \
+    glActiveTexture(GL_TEXTURE1);                                                           \
+    glBindTexture(GL_TEXTURE_2D, PS3Textures_getClutTexture());                             \
+    glEnable(GL_TEXTURE_2D);                                                                \
+    glActiveTexture(GL_TEXTURE0);                                                           \
+    glUseProgram(gPalettedProgram);                                                        \
+    if (gPalettedUPaletteVLoc >= 0) glUniform1f(gPalettedUPaletteVLoc, _v);               \
+} while (0)
+#define PS3_PALETTED_END() do {                                                             \
+    glUseProgram(0);                                                                        \
+    glActiveTexture(GL_TEXTURE1);                                                           \
+    glDisable(GL_TEXTURE_2D);                                                               \
+    glActiveTexture(GL_TEXTURE0);                                                           \
+} while (0)
 #else
 #include <glad/glad.h>
+#define PS3_PALETTED_BEGIN(tpagIndex) ((void)0)
+#define PS3_PALETTED_END()            ((void)0)
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,7 +77,12 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     glDisable(GL_DEPTH_TEST);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
+#ifdef PLATFORM_PS3
+    // TXTR is empty on PS3; page count comes from TEXTURES.BIN.
+    gl->textureCount = PS3Textures_getPageCount();
+#else
     gl->textureCount = dataWin->txtr.count;
+#endif
     gl->glTextures = safeMalloc(gl->textureCount * sizeof(GLuint));
     gl->textureWidths = safeMalloc(gl->textureCount * sizeof(int32_t));
     gl->textureHeights = safeMalloc(gl->textureCount * sizeof(int32_t));
@@ -222,6 +250,28 @@ static bool ensureTextureLoaded(GLLegacyRenderer* gl, uint32_t pageId) {
 
     gl->textureLoaded[pageId] = true;
 
+    int w, h;
+#ifdef PLATFORM_PS3
+    // We'll load the textures on demand.
+    uint8_t* pixels;
+    if (!PS3Textures_loadPage(pageId, &w, &h, &pixels)) {
+        fprintf(stderr, "GL: PS3 page %u has no pixels\n", pageId);
+        return false;
+    }
+    gl->textureWidths[pageId] = w;
+    gl->textureHeights[pageId] = h;
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, gl->glTextures[pageId]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, pixels);
+    // Nearest is mandatory for index textures, bilinear would interpolate palette indices into nonsense colors.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    free(pixels);
+#else
     DataWin* dw = gl->base.dataWin;
     Texture* txtr = &dw->txtr.textures[pageId];
 
@@ -235,7 +285,7 @@ static bool ensureTextureLoaded(GLLegacyRenderer* gl, uint32_t pageId) {
 
     gl->textureWidths[pageId] = w;
     gl->textureHeights[pageId] = h;
-    
+
     glBindTexture(GL_TEXTURE_2D, gl->glTextures[pageId]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -244,6 +294,7 @@ static bool ensureTextureLoaded(GLLegacyRenderer* gl, uint32_t pageId) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     free(pixels);
+#endif
     fprintf(stderr, "GL: Loaded TXTR page %u (%dx%d)\n", pageId, w, h);
     return true;
 }
@@ -264,6 +315,7 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     int32_t texH = gl->textureHeights[pageId];
 
     glBindTexture(GL_TEXTURE_2D, texId);
+    PS3_PALETTED_BEGIN(tpagIndex);
 
     // Compute normalized UVs from TPAG source rect
     float u0 = (float) tpag->sourceX / (float) texW;
@@ -317,6 +369,7 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
         glTexCoord2f(u0, v1);
         glVertex2f(x3, y3);
     glEnd();
+    PS3_PALETTED_END();
 }
 
 static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
@@ -378,6 +431,7 @@ static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, fl
 
     // Emit the entire tile grid in a single glBegin -> glEnd
     glBindTexture(GL_TEXTURE_2D, texId);
+    PS3_PALETTED_BEGIN(tpagIndex);
     glBegin(GL_QUADS);
     glColor4f(r, g, b, alpha);
     for (float dy = startY; endY > dy; dy += tileH) {
@@ -396,6 +450,7 @@ static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, fl
         }
     }
     glEnd();
+    PS3_PALETTED_END();
 }
 
 static void glDrawSpritePos(Renderer* renderer, int32_t tpagIndex, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, float alpha) {
@@ -413,6 +468,7 @@ static void glDrawSpritePos(Renderer* renderer, int32_t tpagIndex, float x1, flo
     int32_t texW = gl->textureWidths[pageId];
     int32_t texH = gl->textureHeights[pageId];
     glBindTexture(GL_TEXTURE_2D, texId);
+    PS3_PALETTED_BEGIN(tpagIndex);
 
     float u0 = (float) tpag->sourceX / (float) texW;
     float v0 = (float) tpag->sourceY / (float) texH;
@@ -436,6 +492,7 @@ static void glDrawSpritePos(Renderer* renderer, int32_t tpagIndex, float x1, flo
         glTexCoord2f(u0, v1);
         glVertex2f(x4, y4);
     glEnd();
+    PS3_PALETTED_END();
 }
 
 static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, float angleDeg, float pivotX, float pivotY, uint32_t color, float alpha) {
@@ -488,6 +545,7 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
         dx = qx3 - pivotX; dy = qy3 - pivotY; cx3 = cosA * dx - sinA * dy + pivotX; cy3 = sinA * dx + cosA * dy + pivotY;
     }
 
+    PS3_PALETTED_BEGIN(tpagIndex);
     glBegin(GL_QUADS);
         glColor4f(r, g, b, alpha);
         glTexCoord2f(u0, v0); glVertex2f(cx0, cy0);
@@ -501,6 +559,7 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
         glColor4f(r, g, b, alpha);
         glTexCoord2f(u0, v1); glVertex2f(cx3, cy3);
     glEnd();
+    PS3_PALETTED_END();
 }
 
 // Emits a single colored quad into the batch using the white pixel texture
@@ -683,6 +742,7 @@ static void glDrawTriangle(Renderer *renderer, float x1, float y1, float x2, flo
 typedef struct {
     Font* font;
     TexturePageItem* fontTpag; // single TPAG for regular fonts (nullptr for sprite fonts)
+    int32_t fontTpagIndex;     // TPAG index for regular fonts (-1 for sprite fonts)
     GLuint texId;
     int32_t texW, texH;
     Sprite* spriteFontSprite; // source sprite for sprite fonts (nullptr for regular fonts)
@@ -693,6 +753,7 @@ typedef struct {
 static bool glResolveFontState(GLLegacyRenderer* gl, DataWin* dw, Font* font, GlFontState* state) {
     state->font = font;
     state->fontTpag = nullptr;
+    state->fontTpagIndex = -1;
     state->texId = 0;
     state->texW = 0;
     state->texH = 0;
@@ -702,6 +763,7 @@ static bool glResolveFontState(GLLegacyRenderer* gl, DataWin* dw, Font* font, Gl
         int32_t fontTpagIndex = font->tpagIndex;
         if (0 > fontTpagIndex) return false;
 
+        state->fontTpagIndex = fontTpagIndex;
         state->fontTpag = &dw->tpag.items[fontTpagIndex];
         int16_t pageId = state->fontTpag->texturePageId;
         if (0 > pageId || (uint32_t) pageId >= gl->textureCount) return false;
@@ -718,7 +780,7 @@ static bool glResolveFontState(GLLegacyRenderer* gl, DataWin* dw, Font* font, Gl
 
 // Resolves UV coordinates, texture ID, and local position for a single glyph
 // Returns false if the glyph can't be drawn
-static bool glResolveGlyph(GLLegacyRenderer* gl, DataWin* dw, GlFontState* state, FontGlyph* glyph, float cursorX, float cursorY, GLuint* outTexId, float* outU0, float* outV0, float* outU1, float* outV1, float* outLocalX0, float* outLocalY0) {
+static bool glResolveGlyph(GLLegacyRenderer* gl, DataWin* dw, GlFontState* state, FontGlyph* glyph, float cursorX, float cursorY, GLuint* outTexId, int32_t* outTpagIdx, float* outU0, float* outV0, float* outU1, float* outV1, float* outLocalX0, float* outLocalY0) {
     Font* font = state->font;
     if (font->isSpriteFont && state->spriteFontSprite != nullptr) {
         Sprite* sprite = state->spriteFontSprite;
@@ -734,6 +796,7 @@ static bool glResolveGlyph(GLLegacyRenderer* gl, DataWin* dw, GlFontState* state
         if (!ensureTextureLoaded(gl, (uint32_t) pid)) return false;
 
         *outTexId = gl->glTextures[pid];
+        *outTpagIdx = tpagIdx;
         int32_t tw = gl->textureWidths[pid];
         int32_t th = gl->textureHeights[pid];
 
@@ -746,6 +809,7 @@ static bool glResolveGlyph(GLLegacyRenderer* gl, DataWin* dw, GlFontState* state
         *outLocalY0 = cursorY + (float) ((int32_t) glyphTpag->targetY - sprite->originY);
     } else {
         *outTexId = state->texId;
+        *outTpagIdx = state->fontTpagIndex;
         *outU0 = (float) (state->fontTpag->sourceX + glyph->sourceX) / (float) state->texW;
         *outV0 = (float) (state->fontTpag->sourceY + glyph->sourceY) / (float) state->texH;
         *outU1 = (float) (state->fontTpag->sourceX + glyph->sourceX + glyph->sourceWidth) / (float) state->texW;
@@ -838,9 +902,11 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
                     float u0, v0, u1, v1;
                     float localX0, localY0;
                     GLuint glyphTexId;
+                    int32_t glyphTpagIdx;
 
-                    if (glResolveGlyph(gl, dw, &fontState, glyph, cursorX, cursorY, &glyphTexId, &u0, &v0, &u1, &v1, &localX0, &localY0)) {
+                    if (glResolveGlyph(gl, dw, &fontState, glyph, cursorX, cursorY, &glyphTexId, &glyphTpagIdx, &u0, &v0, &u1, &v1, &localX0, &localY0)) {
                         glBindTexture(GL_TEXTURE_2D, glyphTexId);
+                        PS3_PALETTED_BEGIN(glyphTpagIdx);
 
                         float localX1 = localX0 + (float) glyph->sourceWidth;
                         float localY1 = localY0 + (float) glyph->sourceHeight;
@@ -869,6 +935,7 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
                             glTexCoord2f(u0, v1);
                             glVertex2f(px3, py3);
                         glEnd();
+                        PS3_PALETTED_END();
 
                         drewSuccessfully = true;
                     }
@@ -977,9 +1044,11 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
                     float u0, v0, u1, v1;
                     float localX0, localY0;
                     GLuint glyphTexId;
+                    int32_t glyphTpagIdx;
 
-                    if (glResolveGlyph(gl, dw, &fontState, glyph, cursorX, cursorY, &glyphTexId, &u0, &v0, &u1, &v1, &localX0, &localY0)) {
+                    if (glResolveGlyph(gl, dw, &fontState, glyph, cursorX, cursorY, &glyphTexId, &glyphTpagIdx, &u0, &v0, &u1, &v1, &localX0, &localY0)) {
                         glBindTexture(GL_TEXTURE_2D, glyphTexId);
+                        PS3_PALETTED_BEGIN(glyphTpagIdx);
 
                         float localX1 = localX0 + (float) glyph->sourceWidth;
                         float localY1 = localY0 + (float) glyph->sourceHeight;
@@ -1008,6 +1077,7 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
                             glTexCoord2f(u0, v1);
                             glVertex2f(px3, py3);
                         glEnd();
+                        PS3_PALETTED_END();
 
                         drewSuccessfully = true;
                     }

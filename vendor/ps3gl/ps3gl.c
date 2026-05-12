@@ -1465,14 +1465,16 @@ static void _ps3gl_bind_unit_to_rsx_slot(GLuint glUnit, int rsxSlot)
 		true,
 		0<<8,  // TODO: minLOD
 		12<<8, // TODO: maxLOD
-		GCM_TEXTURE_MAX_ANISO_16
+		// MAX_ANISO_1 = no anisotropic filtering.
+		GCM_TEXTURE_MAX_ANISO_1
 	);
 	rsxTextureFilter(context,
 		rsxSlot,
 		0,
 		tex->minFilter,
 		tex->magFilter,
-		GCM_TEXTURE_CONVOLUTION_QUINCUNX
+		// NONE means "no extra convolution on top of min/mag filter."
+		GCM_TEXTURE_CONVOLUTION_NONE
 	);
 	rsxTextureWrapMode(context,
 		rsxSlot,
