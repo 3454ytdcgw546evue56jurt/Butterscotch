@@ -2,6 +2,7 @@
 
 #include "GL/gl.h"
 #include "ps3gl.h"
+#include <GL/glext.h>
 #include <stdint.h>
 // TODO: Move the rsxutil functionality into ps3glInit
 #include "rsxutil.h"
@@ -815,17 +816,9 @@ void glTexImage2D( GLenum target, GLint level,
 	{
 		case GL_RGB:
 		{
-			if (currentTexture->data != NULL)
-				rsxFree(currentTexture->data);
+			if (currentTexture->data != NULL) rsxFree(currentTexture->data);
 			const uint8_t *src = (const uint8_t*)pixels;
 			const int textureSize = width*height*4;
-			currentTexture->data = (uint8_t*)rsxMemalign(128, textureSize);
-			for(size_t i=0; i<width*height*4; i+=4) {
-				((uint8_t*)currentTexture->data)[i + 0] = 0xFF;   // A
-				((uint8_t*)currentTexture->data)[i + 1] = *src++; // R
-				((uint8_t*)currentTexture->data)[i + 2] = *src++; // G
-				((uint8_t*)currentTexture->data)[i + 3] = *src++; // B
-			}
 			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
 			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture->gcmTexture.remap  = (
@@ -838,15 +831,22 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
 			);
+
+			if(pixels) {
+				currentTexture->data = (uint8_t*)rsxMemalign(128, textureSize);
+				for(size_t i=0; i<width*height*4; i+=4) {
+					((uint8_t*)currentTexture->data)[i + 0] = 0xFF;   // A
+					((uint8_t*)currentTexture->data)[i + 1] = *src++; // R
+					((uint8_t*)currentTexture->data)[i + 2] = *src++; // G
+					((uint8_t*)currentTexture->data)[i + 3] = *src++; // B
+				}
+			}
 			break;
 		}
 		case GL_RGBA:
 		{
-			if (currentTexture->data != NULL)
-				rsxFree(currentTexture->data);
+			if (currentTexture->data != NULL) rsxFree(currentTexture->data);
 			currentTexture->data = (uint8_t*)rsxMemalign(128, width*height*4);
-			if(pixels)
-				memcpy((void*)currentTexture->data, pixels, width*height*4);
 			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
 			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture->gcmTexture.remap  = (
@@ -859,6 +859,9 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_B_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_A_SHIFT)
 			);
+			if(pixels) {
+				memcpy((void*)currentTexture->data, pixels, width*height*4);
+			}
 			break;
 		}
 		case GL_RED:
@@ -978,6 +981,169 @@ void glDeleteTextures( GLsizei n, const GLuint *textures)
 			rsxFree(_opengl_state.textures[textures[i]].data);
 		_opengl_state.textures[textures[i]].data = NULL;
 		_opengl_state.textures[textures[i]].allocated = false;
+	}
+}
+
+
+void glGenFramebuffers( GLsizei n, GLuint *framebuffers )
+{
+	if(framebuffers == NULL || n == 0)
+		return;
+
+	for(size_t i = 0; i < n; i++)
+	{
+		GLuint id = _opengl_state.nextFramebufferID++;
+		framebuffers[i] = id;
+		if(id < MAX_FRAMEBUFFERS)
+		{
+			_opengl_state.framebuffers[id].id = id;
+			_opengl_state.framebuffers[id].allocated = true;
+			_opengl_state.framebuffers[id].gcmSurface.colorFormat		= GCM_SURFACE_A8R8G8B8;
+			_opengl_state.framebuffers[id].gcmSurface.colorTarget		= GCM_SURFACE_TARGET_0;
+			_opengl_state.framebuffers[id].gcmSurface.colorLocation[0]	= GCM_LOCATION_RSX;
+			_opengl_state.framebuffers[id].gcmSurface.colorOffset[0]	= 0;
+			_opengl_state.framebuffers[id].gcmSurface.colorPitch[0]	= 64;
+
+			_opengl_state.framebuffers[id].gcmSurface.colorLocation[1]	= GCM_LOCATION_RSX;
+			_opengl_state.framebuffers[id].gcmSurface.colorLocation[2]	= GCM_LOCATION_RSX;
+			_opengl_state.framebuffers[id].gcmSurface.colorLocation[3]	= GCM_LOCATION_RSX;
+			_opengl_state.framebuffers[id].gcmSurface.colorOffset[1]	= 0;
+			_opengl_state.framebuffers[id].gcmSurface.colorOffset[2]	= 0;
+			_opengl_state.framebuffers[id].gcmSurface.colorOffset[3]	= 0;
+			_opengl_state.framebuffers[id].gcmSurface.colorPitch[1]	= 64;
+			_opengl_state.framebuffers[id].gcmSurface.colorPitch[2]	= 64;
+			_opengl_state.framebuffers[id].gcmSurface.colorPitch[3]	= 64;
+
+			_opengl_state.framebuffers[id].gcmSurface.depthFormat	= GCM_SURFACE_ZETA_Z24S8;
+			_opengl_state.framebuffers[id].gcmSurface.depthLocation	= GCM_LOCATION_RSX;
+			_opengl_state.framebuffers[id].gcmSurface.depthOffset	= 0;
+			_opengl_state.framebuffers[id].gcmSurface.depthPitch	= 64;
+
+			_opengl_state.framebuffers[id].gcmSurface.type			= GCM_SURFACE_TYPE_LINEAR;
+			_opengl_state.framebuffers[id].gcmSurface.antiAlias		= GCM_SURFACE_CENTER_1;
+
+			_opengl_state.framebuffers[id].gcmSurface.width			= 0;
+			_opengl_state.framebuffers[id].gcmSurface.height		= 0;
+			_opengl_state.framebuffers[id].gcmSurface.x				= 0;
+			_opengl_state.framebuffers[id].gcmSurface.y				= 0;
+		}
+	}
+}
+
+void glDeleteFramebuffers( GLsizei n, const GLuint *framebuffers)
+{
+	for(size_t i = 0; n > i; i++)
+	{
+		_opengl_state.framebuffers[framebuffers[i]].allocated = false;
+	}
+}
+
+void glBindFramebuffer( GLenum target, GLuint framebuffer )
+{
+	if(target == GL_FRAMEBUFFER) _opengl_state.bound_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
+	if(target == GL_READ_FRAMEBUFFER) _opengl_state.bound_read_framebuffer = &_opengl_state.framebuffers[framebuffer];
+	if(target == GL_DRAW_FRAMEBUFFER) _opengl_state.bound_write_framebuffer = &_opengl_state.framebuffers[framebuffer];
+}
+
+GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)
+{
+				rsxSetTransferImage(
+				context, // context
+				GCM_TRANSFER_LOCAL_TO_LOCAL, //mode
+				_opengl_state.bound_write_framebuffer == NULL ? 
+				_opengl_state.bound_write_framebuffer->gcmSurface.colorOffset[curr_fb] :
+				color_offset[curr_fb], // dstOffset
+				_opengl_state.bound_write_framebuffer == NULL ? 
+				_opengl_state.bound_write_framebuffer->gcmSurface.width*4 :
+				display_width*4, // dstPitch
+				dstX1-dstX0, // dstX
+				dstY1-dstY0, // dstY
+				_opengl_state.bound_read_framebuffer == NULL ? 
+				_opengl_state.bound_read_framebuffer->gcmSurface.colorOffset[curr_fb^1] :
+				color_offset[curr_fb^1], // srcOffset
+				_opengl_state.bound_read_framebuffer == NULL ? 
+				_opengl_state.bound_read_framebuffer->gcmSurface.width*4 :
+				display_width*4, // dstPitch
+				srcX0, // srcX 
+				srcY0, //  srcY
+				srcX1-srcX0, // width
+				srcY1-srcY0, // height
+				4 // bpp
+			);
+}
+
+GLenum glCheckFramebufferStatus (GLenum target) {
+	return GL_FRAMEBUFFER_COMPLETE;
+}
+
+// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl->surfaceTexture[surfaceID], 0);
+// TODO: Assumes target = GL_FRAMEBUFFER, attachment = GL_COLOR_ATTACHMENT0, textarget = GL_TEXTURE_2D and level = 0;
+void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {
+	struct ps3gl_texture tx = _opengl_state.textures[texture];
+	_opengl_state.bound_framebuffer->fbTexture = &_opengl_state.textures[texture];
+
+	// If framebuffer don't swap channels
+	tx.gcmTexture.remap  = (
+				   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
+				   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+				   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+				   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
+				   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
+				   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+				   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+				   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_TYPE_B_SHIFT)
+	);
+
+	gcmSurface sf = _opengl_state.bound_framebuffer->gcmSurface;
+
+	sf.colorFormat		= GCM_SURFACE_A8R8G8B8;
+	sf.colorTarget		= GCM_SURFACE_TARGET_0;
+	sf.colorLocation[0]	= GCM_LOCATION_RSX;
+	sf.colorOffset[0]	= tx.gcmTexture.offset;
+	sf.colorPitch[0]	= tx.gcmTexture.width*4;
+	sf.width			= tx.gcmTexture.width;
+	sf.height			= tx.gcmTexture.height;
+	_setup_draw_env();
+}
+
+void glGetIntegerv( GLenum pname, GLint *params )
+{
+	if(pname == GL_FRAMEBUFFER_BINDING) *params = _opengl_state.bound_framebuffer->id;
+	if(pname == GL_PACK_ALIGNMENT) *params = 1;
+}
+
+void glPixelStorei( GLenum pname, GLint param ) {}
+
+void glReadPixels( GLint x, GLint y,
+                                    GLsizei width, GLsizei height,
+                                    GLenum format, GLenum type,
+                                    GLvoid *pixels )
+{
+	void* data = (_opengl_state.bound_framebuffer == NULL) ? 
+	(void*)color_buffer[curr_fb^1] : 
+	(void*)_opengl_state.bound_framebuffer->fbTexture->data;
+
+    // Ensure that the draw calls were executed
+	if(format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
+		waitFinish();
+		const uint8_t* src = (const uint8_t*) data;
+		size_t srcRowBytes = width*4;
+		size_t dstRowBytes = (size_t) width * 4;
+		for(size_t row = 0; row < height; row++) {
+			const uint8_t* srcLine = src + ((size_t) (y + row)) * srcRowBytes + (size_t) (x * 4);
+			uint8_t* dstLine = pixels + (size_t) row * dstRowBytes;
+			for(size_t px = 0; px < width; px++) {
+				// Swizzle from ARGB to RGBA
+				uint8_t a = srcLine[px * 4 + 0];
+				uint8_t r = srcLine[px * 4 + 1];
+				uint8_t g = srcLine[px * 4 + 2];
+				uint8_t b = srcLine[px * 4 + 3];
+				dstLine[px * 4 + 0] = r;
+				dstLine[px * 4 + 1] = g;
+				dstLine[px * 4 + 2] = b;
+				dstLine[px * 4 + 3] = a;
+			}
+		}
 	}
 }
 
@@ -1444,7 +1610,6 @@ void glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, cons
 	rsxSetVertexProgramParameter(context, (rsxVertexProgram*)s->blob, u->constHandle, (float*)value);
 }
 
-
 /* PS3GL Functions */
 
 static void _program_exit_callback(void)
@@ -1525,6 +1690,8 @@ void glGetFloatv(GLenum pname, GLfloat *params)
 
 void _setup_draw_env(void)
 {
+	rsxSetSurface(context,&_opengl_state.bound_framebuffer->gcmSurface);
+
 	rsxSetShadeModel(context, _opengl_state.shade_model);
 	rsxSetPointSize(context, _opengl_state.point_size);
 
