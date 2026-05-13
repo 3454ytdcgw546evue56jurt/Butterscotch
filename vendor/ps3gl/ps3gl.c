@@ -1105,10 +1105,12 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 	sf.height			= tx.gcmTexture.height;
 
 	// This is wrong but i dont think i can skip a depth attachment
+	/*
 	sf.depthFormat		= GCM_SURFACE_ZETA_Z24S8;
 	sf.depthLocation	= GCM_LOCATION_RSX;
 	sf.depthOffset		= depth_offset;
 	sf.depthPitch		= depth_pitch;
+	*/
 	_setup_draw_env();
 }
 
@@ -1695,8 +1697,9 @@ void glGetFloatv(GLenum pname, GLfloat *params)
 }
 
 void _setup_draw_env(void)
-{
-	rsxSetSurface(context,&_opengl_state.bound_draw_framebuffer->gcmSurface);
+    if(_opengl_state.bound_draw_framebuffer)
+	    rsxSetSurface(context,&_opengl_state.bound_draw_framebuffer->gcmSurface);
+    else setRenderTarget(curr_fb);
 
 	rsxSetShadeModel(context, _opengl_state.shade_model);
 	rsxSetPointSize(context, _opengl_state.point_size);
