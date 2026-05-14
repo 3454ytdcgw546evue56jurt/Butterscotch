@@ -57,6 +57,7 @@ pack_zeta(bool use_stencil, double depth, unsigned stencil)
 
 void glClear( GLbitfield mask )
 {
+	_setup_draw_env();
 	uint32_t rsx_mask = 0;
 
 	if(mask == (GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT))
