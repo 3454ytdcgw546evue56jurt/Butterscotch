@@ -140,6 +140,7 @@ bool GLCommon_surfaceGetPixels(GLuint* surfaces, int32_t* surfaceWidth, int32_t*
     glBindFramebuffer(GL_FRAMEBUFFER, surfaces[surfaceId]);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
+    #ifndef PLATFORM_PS3
     uint8_t* tmp = safeMalloc((size_t) w * (size_t) h * 4);
     glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, tmp);
 
@@ -149,6 +150,9 @@ bool GLCommon_surfaceGetPixels(GLuint* surfaces, int32_t* surfaceWidth, int32_t*
         memcpy(outRGBA + (size_t) py * (size_t) rowBytes, tmp + (size_t) (h - 1 - py) * (size_t) rowBytes, (size_t) rowBytes);
     }
     free(tmp);
+    #else
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, outRGBA);
+    #endif
 
     glPixelStorei(GL_PACK_ALIGNMENT, prevPackAlign);
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint) prevFbo);
