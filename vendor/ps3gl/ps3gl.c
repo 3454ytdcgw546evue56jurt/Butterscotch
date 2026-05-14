@@ -1063,8 +1063,8 @@ GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GL
   scale.outY = dstY0;
   scale.outW = dstX1-dstX0;
   scale.outH = dstY1-dstY0;
-  scale.ratioX = rsxGetFixedSint32(1.f);
-  scale.ratioY = rsxGetFixedSint32(1.f);
+  scale.ratioX = rsxGetFixedSint32((float)(srcX1 - srcX0) / (float)(dstX1 - dstX0));
+  scale.ratioY = rsxGetFixedSint32((float)(srcY1 - srcY0) / (float)(dstY1 - dstY0));
   scale.inX = rsxGetFixedUint16(srcX0);
   scale.inY = rsxGetFixedUint16(srcY0);
   scale.inW = srcX1-srcX0;
