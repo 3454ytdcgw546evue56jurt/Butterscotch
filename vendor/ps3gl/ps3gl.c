@@ -1134,7 +1134,7 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 	sf->colorTarget		= GCM_SURFACE_TARGET_0;
 	sf->colorLocation[0]	= GCM_LOCATION_RSX;
 	sf->colorOffset[0]	= tx->gcmTexture.offset;
-	sf->colorPitch[0]	= tx->gcmTexture.width*sizeof(uint32_t);
+	sf->colorPitch[0]	= tx->gcmTexture.pitch;
 	sf->width			= tx->gcmTexture.width;
 	sf->height			= tx->gcmTexture.height;
 
@@ -1174,9 +1174,7 @@ void glReadPixels( GLint x, GLint y,
 		size_t srcRowBytes = width*4;
 		size_t dstRowBytes = (size_t) width * 4;
 		for(size_t row = 0; row < height; row++) {
-			// Sample Bottom Up
-			size_t actualRow = targetHeight - row - height;
-			const uint8_t* srcLine = src + ((size_t) (y + actualRow)) * srcRowBytes + (size_t) (x * 4);
+			const uint8_t* srcLine = src + ((size_t) (y + row)) * srcRowBytes + (size_t) (x * 4);
 			uint8_t* dstLine = pixels + (size_t) row * dstRowBytes;
 			for(size_t px = 0; px < width; px++) {
 				// Swizzle from ARGB to RGBA
