@@ -1024,6 +1024,8 @@ void glGenFramebuffers( GLsizei n, GLuint *framebuffers )
 			_opengl_state.framebuffers[id].gcmSurface.depthLocation	= GCM_LOCATION_RSX;
 			_opengl_state.framebuffers[id].gcmSurface.depthOffset	= 0;
 			_opengl_state.framebuffers[id].gcmSurface.depthPitch	= 64;
+			_opengl_state.framebuffers[id].depthData				= NULL;
+			_opengl_state.framebuffers[id].depthSize				= 0;
 
 			_opengl_state.framebuffers[id].gcmSurface.type			= GCM_SURFACE_TYPE_LINEAR;
 			_opengl_state.framebuffers[id].gcmSurface.antiAlias		= GCM_SURFACE_CENTER_1;
@@ -1040,7 +1042,13 @@ void glDeleteFramebuffers( GLsizei n, const GLuint *framebuffers)
 {
 	for(size_t i = 0; n > i; i++)
 	{
-		_opengl_state.framebuffers[framebuffers[i]].allocated = false;
+		struct ps3gl_framebuffer* fb = &_opengl_state.framebuffers[framebuffers[i]];
+		if (fb->depthData != NULL) {
+			rsxFree(fb->depthData);
+			fb->depthData = NULL;
+			fb->depthSize = 0;
+		}
+		fb->allocated = false;
 	}
 }
 
@@ -1138,6 +1146,29 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 	sf->width			= tx->gcmTexture.width;
 	sf->height			= tx->gcmTexture.height;
 
+	// YES WE NEED A REAL DEPTH BUFFER, IF NOT RSX (OR RPCS3?) WILL DROP ANY WRITES BEYOND ~1280X1280
+	// WE ALSO CAN'T SET THE DEPTH FORMAT TO 0 (RPCS3 DOES NOT LIKE THIS)
+	{
+		uint32_t depthPitch = ((tx->gcmTexture.width * 2u) + 63u) & ~63u;
+		uint32_t depthSize  = depthPitch * tx->gcmTexture.height;
+		if (dstFB->depthData != NULL && dstFB->depthSize < depthSize) {
+			rsxFree(dstFB->depthData);
+			dstFB->depthData = NULL;
+			dstFB->depthSize = 0;
+		}
+		if (dstFB->depthData == NULL) {
+			dstFB->depthData = rsxMemalign(128, depthSize);
+			dstFB->depthSize = depthSize;
+		}
+		uint32_t depthOff = 0;
+		rsxAddressToOffset(dstFB->depthData, &depthOff);
+		sf->depthFormat   = GCM_SURFACE_ZETA_Z16;
+		sf->depthLocation = GCM_LOCATION_RSX;
+		sf->depthOffset   = depthOff;
+		sf->depthPitch    = depthPitch;
+	}
+
+
 	// This is wrong but i dont think i can skip a depth attachment
 	/*
 	sf.depthFormat		= GCM_SURFACE_ZETA_Z24S8;
@@ -1160,10 +1191,8 @@ void glReadPixels( GLint x, GLint y,
                                     GLenum format, GLenum type,
                                     GLvoid *pixels )
 {
-	bool isFBO = _opengl_state.bound_read_framebuffer != NULL;
-	GLint targetHeight = (_opengl_state.bound_read_framebuffer != NULL) ? (GLint) _opengl_state.bound_read_framebuffer->gcmSurface.height : (GLint) display_height;
-	void* data = (_opengl_state.bound_read_framebuffer == NULL) ? 
-	(void*)color_buffer[curr_fb^1] : 
+	void* data = (_opengl_state.bound_read_framebuffer == NULL) ?
+	(void*)color_buffer[curr_fb^1] :
 	(void*)_opengl_state.bound_read_framebuffer->fbTexture->data;
 
     // Ensure that the draw calls were executed

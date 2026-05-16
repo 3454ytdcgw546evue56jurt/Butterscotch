@@ -154,6 +154,9 @@ struct ps3gl_framebuffer {
 	GLint wrapS, wrapR, wrapT;
 	struct ps3gl_texture *fbTexture;
 	gcmSurface gcmSurface;
+	// Per-FBO depth buffer in RSX-local memory. Sized to match the bound color attachment.
+	void* depthData;
+	uint32_t depthSize;
 };
 
 struct ps3gl_opengl_state
