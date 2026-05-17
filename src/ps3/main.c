@@ -401,6 +401,7 @@ int main(int argc, char* argv[]) {
         float displayScaleX;
         float displayScaleY;
 
+        Runner_drawPre(runner, fbWidth, fbHeight);
         Runner_computeViewDisplayScale(runner, gameW, gameH, &displayScaleX, &displayScaleY);
 
         renderer->vtable->beginFrame(renderer, gameW, gameH, fbWidth, fbHeight);
@@ -410,7 +411,8 @@ int main(int argc, char* argv[]) {
             int rInt = BGR_R(runner->backgroundColor);
             int gInt = BGR_G(runner->backgroundColor);
             int bInt = BGR_B(runner->backgroundColor);
-            glClearColor(rInt / 255.0f, gInt / 255.0f, bInt / 255.0f, 1.0f);
+            int aInt = BGR_A(runner->backgroundColor);
+            glClearColor(rInt / 255.0f, gInt / 255.0f, bInt / 255.0f, aInt / 255.0f);
         } else {
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         }
@@ -418,8 +420,10 @@ int main(int argc, char* argv[]) {
 
         double drawStart = PS3_GET_TIME;
         Runner_drawViews(runner, gameW, gameH, displayScaleX, displayScaleY, debugShowCollisionMasks);
-
-        renderer->vtable->endFrame(renderer);
+        renderer->vtable->endFrameInit(renderer);
+        Runner_drawPost(runner, fbWidth, fbHeight);
+        renderer->vtable->endFrameEnd(renderer);
+        Runner_drawGUI(runner, fbWidth, fbHeight, gameW, gameH);
         double drawTime = PS3_GET_TIME - drawStart;
 
         // ===[ Debug Overlay ]===

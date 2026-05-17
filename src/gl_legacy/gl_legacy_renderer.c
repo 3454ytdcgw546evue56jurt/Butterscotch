@@ -215,7 +215,19 @@ static void glBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, int32_t p
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
+#ifdef PLATFORM_PS3
     glApplyViewport(gl, portX, portY, portW, portH);
+#else
+    GLint boundFbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &boundFbo);
+    if (boundFbo == 0) {
+        glViewport(0, 0, portW, portH);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(0, 0, portW, portH);
+    } else {
+        glApplyViewport(gl, portX, portY, portW, portH);
+    }
+#endif
 
     Matrix4f projection;
     Matrix4f_identity(&projection);
@@ -232,9 +244,21 @@ static void glEndGUI(MAYBE_UNUSED Renderer* renderer) {
     glDisable(GL_SCISSOR_TEST);
 }
 
-static void glEndFrame(Renderer* renderer) {
-    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
-    GLCommon_letterboxBlit(gl->fbo, gl->fboWidth, gl->fboHeight, gl->gameW, gl->gameH, gl->windowW, gl->windowH);
+static void glEndFrameInit(Renderer* renderer) {
+    MAYBE_UNUSED GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    if (renderer->usingAppSurface && !renderer->appSurfaceAutoDraw) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return;
+    }
+    GLCommon_beginLetterboxBlit(gl->fbo);
+}
+
+static void glEndFrameEnd(Renderer* renderer) {
+    MAYBE_UNUSED GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    if (renderer->usingAppSurface && !renderer->appSurfaceAutoDraw) {
+        return;
+    }
+    GLCommon_endLetterboxBlit(gl->fboWidth, gl->fboHeight, gl->gameW, gl->gameH, gl->windowW, gl->windowH);
 }
 
 static void glRendererFlush(MAYBE_UNUSED Renderer* renderer) {}
@@ -1575,7 +1599,8 @@ static RendererVtable glVtable = {
     .init = glInit,
     .destroy = glDestroy,
     .beginFrame = glBeginFrame,
-    .endFrame = glEndFrame,
+    .endFrameInit = glEndFrameInit,
+    .endFrameEnd = glEndFrameEnd,
     .beginView = glBeginView,
     .endView = glEndView,
     .beginGUI = glBeginGUI,
@@ -1631,5 +1656,8 @@ Renderer* GLLegacyRenderer_create(void) {
     gl->colorWriteG = true;
     gl->colorWriteB = true;
     gl->colorWriteA = true;
+
+    gl->base.appSurfaceAutoDraw = true;
+    gl->base.usingAppSurface = true;
     return (Renderer*) gl;
 }

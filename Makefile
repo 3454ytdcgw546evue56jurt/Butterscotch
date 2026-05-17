@@ -17,6 +17,7 @@ INCLUDES := -I. -Isrc -Ivendor/stb/ds -Isrc/image -Ivendor/stb/image -Ivendor/st
 HEADERS := $(wildcard src/*.h) $(shell find vendor -name '*.h')
 SRCS := $(wildcard src/*.c) $(wildcard src/image/*.c) vendor/md5/md5.c vendor/glad/src/glad.c
 
+PLATFORM := glfw
 AUDIO_BACKEND := miniaudio
 
 ifdef BUTTERSCOTCH_COMMIT_DATE
@@ -38,12 +39,18 @@ ifndef DISABLE_BC17
 DEFINES += -DENABLE_BC17
 endif
 
+# GNU make doesn't have a way to do OR in conditionals, stupid language for clowns
 ifndef DISABLE_LEGACY_GL
+ENABLE_GL := 1
+endif
 ifndef DISABLE_MODERN_GL
+ENABLE_GL := 1
+endif
+
+ifdef ENABLE_GL
 INCLUDES += -Isrc/gl_common -Isrc/gl
 SRCS += $(wildcard src/gl_common/*.c)
 HEADERS += $(wildcard src/gl_common/*.h)
-endif
 endif
 
 ifndef DISABLE_LEGACY_GL
@@ -56,9 +63,11 @@ endif
 endif
 
 ifndef DISABLE_MODERN_GL
+ifneq ($(PLATFORM),sdl)
 DEFINES += -DENABLE_MODERN_GL
 SRCS += $(wildcard src/gl/*.c)
 HEADERS += $(wildcard src/gl/*.h)
+endif
 endif
 
 ifdef DISABLE_BC16
@@ -82,6 +91,9 @@ INCLUDES += -Isrc/audio/miniaudio -Ivendor/miniaudio
 DEFINES += -DUSE_MINIAUDIO
 SRCS += $(wildcard src/audio/miniaudio/*.c)
 HEADERS += $(wildcard src/audio/miniaudio/*.h)
+ifneq ($(OS),Windows)
+LIBS += -pthread
+endif
 endif
 ifeq ($(AUDIO_BACKEND),openal)
 INCLUDES += -Isrc/audio/openal
@@ -95,10 +107,10 @@ LIBS += -lopenal
 endif
 endif
 
-PLATFORM := glfw
 ifeq ($(PLATFORM),glfw)
 SRCS += $(wildcard src/glfw/*.c)
 HEADERS += $(wildcard src/glfw/*.h)
+DEFINES += -DUSE_GLFW
 ifdef USE_GLFW2
 ifdef ENABLE_GLES
 $(error can't enable both GLES and GLFW2 at the same time!)
@@ -115,7 +127,17 @@ endif
 endif
 LIBS += $(GLFW_LIBS)
 else
+ifeq ($(PLATFORM),sdl)
+SRCS += $(wildcard src/sdl/*.c)
+HEADERS += $(wildcard src/sdl/*.h)
+DEFINES += -DUSE_SDL
+ifndef SDL_LIBS
+SDL_LIBS := $(shell pkg-config --libs sdl)
+endif
+LIBS += $(SDL_LIBS)
+else
 $(error invalid platform)
+endif
 endif
 
 ifeq ($(OS),Windows)
