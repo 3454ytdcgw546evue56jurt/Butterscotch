@@ -278,6 +278,28 @@ static void parseGEN8(BinaryReader* reader, DataWin* dw) {
     g->info = BinaryReader_readUint32(reader);
     g->licenseCRC32 = BinaryReader_readUint32(reader);
     BinaryReader_readBytes(reader, g->licenseMD5, 16);
+    if (10 >= g->bytecodeVersion) {
+        int32_t ts = BinaryReader_readInt32(reader); // int32 timestamp (FILETIME-derived)
+        g->timestamp = (uint64_t) (int64_t) ts;
+        BinaryReader_skip(reader, 4); // unread padding at body+0x60
+        g->displayName = readStringPtr(reader, dw);
+        g->roomOrderCount = BinaryReader_readUint32(reader);
+        if (g->roomOrderCount > 0) {
+            g->roomOrder = safeMalloc(g->roomOrderCount * sizeof(int32_t));
+            repeat(g->roomOrderCount, i) {
+                g->roomOrder[i] = BinaryReader_readInt32(reader);
+            }
+        } else {
+            g->roomOrder = nullptr;
+        }
+        g->activeTargets = 0;
+        g->functionClassifications = 0;
+        g->steamAppID = 0;
+        g->debuggerPort = 0;
+        DataWin_bumpVersionTo(dw, g->major, g->minor, g->release, g->build);
+        return;
+    }
+
     g->timestamp = BinaryReader_readUint64(reader);
     g->displayName = readStringPtr(reader, dw);
     g->activeTargets = BinaryReader_readUint64(reader);
@@ -526,6 +548,19 @@ static void parseSOND(BinaryReader* reader, DataWin* dw) {
         snd->file = readStringPtr(reader, dw);
         snd->effects = BinaryReader_readUint32(reader);
         snd->volume = BinaryReader_readFloat32(reader);
+        if (10 >= dw->gen8.bytecodeVersion) {
+            snd->pan = BinaryReader_readFloat32(reader);
+
+            bool embedded = BinaryReader_readBool32(reader);
+            if (embedded)
+                snd->flags |= AUDIO_ENTRY_FLAG_IS_EMBEDDED;
+
+            snd->pitch = 1.0f;
+            snd->audioGroup = 0;
+            snd->audioFile = BinaryReader_readInt32(reader);
+            continue;
+        }
+        snd->pan = 0.0f;
         snd->pitch = BinaryReader_readFloat32(reader);
 
         // AudioGroup or preload field at offset +28
@@ -748,8 +783,14 @@ static void parsePATH(BinaryReader* reader, DataWin* dw) {
         path->internalPointCount = 0;
         path->length = 0.0;
         path->name = readStringPtr(reader, dw);
-        path->isSmooth = BinaryReader_readBool32(reader);
-        path->isClosed = BinaryReader_readBool32(reader);
+        if (10 >= dw->gen8.bytecodeVersion) {
+            // BC10: closed at +4, smooth at +8 (swapped vs later versions)
+            path->isClosed = BinaryReader_readBool32(reader);
+            path->isSmooth = BinaryReader_readBool32(reader);
+        } else {
+            path->isSmooth = BinaryReader_readBool32(reader);
+            path->isClosed = BinaryReader_readBool32(reader);
+        }
         path->precision = BinaryReader_readUint32(reader);
 
         // Points SimpleList
@@ -1298,7 +1339,7 @@ static void readRoomBackgrounds(BinaryReader* reader, Room* room) {
     free(bgPtrs);
 }
 
-static void readRoomViews(BinaryReader* reader, Room* room) {
+static void readRoomViews(BinaryReader* reader, DataWin* dw, Room* room) {
     uint32_t viewCount;
     uint32_t* viewPtrsArr = readPointerTable(reader, &viewCount);
     room->views = safeMalloc(8 * sizeof(RoomView));
@@ -1610,7 +1651,7 @@ static void readRoomPayload(BinaryReader* reader, DataWin* dw, Room* room) {
     readRoomBackgrounds(reader, room);
 
     BinaryReader_seek(reader, room->viewsFileOffset);
-    readRoomViews(reader, room);
+    readRoomViews(reader, dw, room);
 
     BinaryReader_seek(reader, room->gameObjectsFileOffset);
     readRoomGameObjects(reader, dw, room);

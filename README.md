@@ -29,6 +29,7 @@ While our target is Undertale v1.08, that doesn't mean that other games CAN'T ru
 Butterscotch supports the following bytecode versions:
 
 * Bytecode Version 8 (GameMaker: Studio 1.0.198+)
+* Bytecode Version 10 (GameMaker: Studio 1.1.690+)
 * Bytecode Version 13
 * Bytecode Version 14
 * Bytecode Version 15
