@@ -2,6 +2,7 @@
 #include "binary_utils.h"
 #include "instance.h"
 #include "json_reader.h"
+#include "json_writer.h"
 #include "real_type.h"
 #include "runner.h"
 #include "runner_gamepad.h"
@@ -12068,6 +12069,117 @@ static RValue builtin_string_hash_to_newline(MAYBE_UNUSED VMContext* ctx, RValue
     return RValue_makeOwnedString((char*) result.text);
 }
 
+// See GameMaker-HTML5's Function_File.js for reference.
+// useFloatMarkers: GameMaker only started encoding NaN/Infinity as the special "@@nan$$"/"@@infinity$$" string tokens in GM 2023.2+
+static void jsonEncodeReal(JsonWriter* writer, GMLReal value, bool useFloatMarkers) {
+    double d = (double) value;
+
+    if (isnan(d) || isinf(d)) {
+        if (useFloatMarkers) {
+            if (isnan(d)) {
+                JsonWriter_string(writer, "@@nan$$");
+            } else {
+                JsonWriter_string(writer, d > 0 ? "@@infinity$$" : "@@-infinity$$");
+            }
+            return;
+        }
+
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%g", d);
+        JsonWriter_rawValue(writer, buf);
+        return;
+    }
+
+    // Integer-valued reals are emitted without a fractional part, matching json_encode
+    const double INT_SAFE_BOUND = 9.2233720368547758e18; // largest double strictly < 2^63
+    if (d >= -INT_SAFE_BOUND && d <= INT_SAFE_BOUND && d == (double) (int64_t) d) {
+        JsonWriter_int(writer, (int64_t) d);
+        return;
+    }
+
+    // Find the shortest precision that round-trips so we emit "0.1" instead of "0.10000000000000001"
+    char buf[64];
+    repeat(18, i) {
+        int precision = i + 1;
+        snprintf(buf, sizeof(buf), "%.*g", precision, d);
+        if (strtod(buf, nullptr) == d) break;
+    }
+    JsonWriter_rawValue(writer, buf);
+}
+
+static void jsonEncodeValue(JsonWriter* writer, RValue val, bool useFloatMarkers) {
+    switch (val.type) {
+        case RVALUE_UNDEFINED:
+            JsonWriter_null(writer);
+            break;
+        case RVALUE_REAL:
+            jsonEncodeReal(writer, val.real, useFloatMarkers);
+            break;
+        case RVALUE_INT32:
+            JsonWriter_int(writer, val.int32);
+            break;
+#ifndef NO_RVALUE_INT64
+        case RVALUE_INT64:
+            JsonWriter_int(writer, val.int64);
+            break;
+#endif
+        case RVALUE_BOOL:
+            JsonWriter_bool(writer, val.int32 != 0);
+            break;
+        case RVALUE_STRING:
+            JsonWriter_string(writer, val.string);
+            break;
+        case RVALUE_ARRAY: {
+            JsonWriter_beginArray(writer);
+            if (val.array != nullptr) {
+                int32_t length = GMLArray_length1D(val.array);
+                repeat(length, i) {
+                    RValue* slot = GMLArray_slot(val.array, i);
+                    jsonEncodeValue(writer, slot != nullptr ? *slot : RValue_makeUndefined(), useFloatMarkers);
+                }
+            }
+            JsonWriter_endArray(writer);
+            break;
+        }
+        default: {
+            char* str = RValue_toString(val);
+            JsonWriter_string(writer, str);
+            free(str);
+            break;
+        }
+    }
+}
+
+// json_encode(map [, prettify]): encodes a ds_map into a JSON object string.
+static RValue builtin_json_encode(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) {
+        return RValue_makeOwnedString(safeStrdup("{}"));
+    }
+
+    Runner* runner = ctx->runner;
+    int32_t mapIndex = RValue_toInt32(args[0]);
+    // TODO: Implement prettify!
+    bool prettify = argCount == 2 ? RValue_toBool(args[1]) : false;
+    DsMapEntry** mapPtr = dsMapGet(runner, mapIndex);
+    bool useFloatMarkers = DataWin_isVersionAtLeast(ctx->dataWin, 2023, 2, 0, 0);
+
+    JsonWriter writer = JsonWriter_create();
+    JsonWriter_beginObject(&writer);
+
+    if (mapPtr != nullptr && *mapPtr != nullptr) {
+        repeat(shlen(*mapPtr), i) {
+            JsonWriter_key(&writer, (*mapPtr)[i].key);
+            jsonEncodeValue(&writer, (*mapPtr)[i].value, useFloatMarkers);
+        }
+    }
+
+    JsonWriter_endObject(&writer);
+
+    char* result = JsonWriter_copyOutput(&writer);
+    JsonWriter_free(&writer);
+    return RValue_makeOwnedString(result);
+}
+
 // json_decode
 static RValue builtin_json_decode(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) {
@@ -13226,6 +13338,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "alarm_get", builtin_alarm_get);
     VM_registerBuiltin(ctx, "string_hash_to_newline", builtin_string_hash_to_newline);
     VM_registerBuiltin(ctx, "json_decode", builtin_json_decode);
+    VM_registerBuiltin(ctx, "json_encode", builtin_json_encode);
     VM_registerBuiltin(ctx, "font_add_sprite", builtin_font_add_sprite);
     VM_registerBuiltin(ctx, "font_add_sprite_ext", builtin_font_add_sprite_ext);
     VM_registerBuiltin(ctx, "font_get_name", builtin_font_get_name);
