@@ -221,6 +221,8 @@ if(PLATFORM STREQUAL "desktop")
     endif()
 
     if(DESKTOP_BACKEND STREQUAL "glfw3")
+        add_compile_definitions(USE_GLFW3)
+
         if(MINGW)
             find_package(glfw3 REQUIRED)
 
