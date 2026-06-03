@@ -2253,6 +2253,19 @@ static void handleCallV(VMContext* ctx, uint32_t instr) {
 
 // ===[ With-Statement Helpers (PushEnv/PopEnv) ]===
 
+// Resolves a collision/instance "target" argument by mapping the special INSTANCE_SELF and INSTANCE_OTHER to the concrete instance ID they refer to.
+int32_t VM_resolveInstanceTarget(VMContext* ctx, int32_t target) {
+    if (target == INSTANCE_SELF) {
+        Instance* self = (Instance*) ctx->currentInstance;
+        return self != nullptr ? (int32_t) self->instanceId : INSTANCE_NOONE;
+    }
+    if (target == INSTANCE_OTHER) {
+        Instance* other = (Instance*) ctx->otherInstance;
+        return other != nullptr ? (int32_t) other->instanceId : INSTANCE_NOONE;
+    }
+    return target;
+}
+
 // Checks if objectIndex is or inherits from targetObjectIndex by walking the parent chain.
 bool VM_isObjectOrDescendant(DataWin* dataWin, int32_t objectIndex, int32_t targetObjectIndex) {
     int32_t currentObj = objectIndex;

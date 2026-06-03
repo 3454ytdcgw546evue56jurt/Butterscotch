@@ -2361,7 +2361,7 @@ static RValue builtin_distance_to_object(VMContext* ctx, RValue* args, int32_t a
     if (1 > argCount) return RValue_makeReal(0.0);
 
     Runner* runner = ctx->runner;
-    int32_t targetObjIndex = RValue_toInt32(args[0]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[0]));
     Instance* self = ctx->currentInstance;
 
     // Compute self bbox
@@ -9266,7 +9266,7 @@ static RValue builtin_place_meeting(VMContext* ctx, RValue* args, int32_t argCou
 
     GMLReal testX = RValue_toReal(args[0]);
     GMLReal testY = RValue_toReal(args[1]);
-    int32_t target = RValue_toInt32(args[2]);
+    int32_t target = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[2]));
     if (target == INSTANCE_NOONE) return RValue_makeBool(false);
 
     // Save current position and temporarily move to test position
@@ -9327,7 +9327,7 @@ static RValue builtin_collision_line(VMContext* ctx, RValue* args, int32_t argCo
     GMLReal ly1 = RValue_toReal(args[1]);
     GMLReal lx2 = RValue_toReal(args[2]);
     GMLReal ly2 = RValue_toReal(args[3]);
-    int32_t targetObjIndex = RValue_toInt32(args[4]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[4]));
     int32_t prec = RValue_toInt32(args[5]);
     int32_t notme = RValue_toInt32(args[6]);
 
@@ -9502,7 +9502,7 @@ static RValue builtin_collision_rectangle(VMContext* ctx, RValue* args, int32_t 
     GMLReal y1 = RValue_toReal(args[1]);
     GMLReal x2 = RValue_toReal(args[2]);
     GMLReal y2 = RValue_toReal(args[3]);
-    int32_t targetObjIndex = RValue_toInt32(args[4]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[4]));
     int32_t prec = RValue_toInt32(args[5]);
     int32_t notme = RValue_toInt32(args[6]);
 
@@ -9572,7 +9572,7 @@ static RValue builtin_collision_circle(VMContext* ctx, RValue* args, int32_t arg
     GMLReal cx = RValue_toReal(args[0]);
     GMLReal cy = RValue_toReal(args[1]);
     GMLReal radius = RValue_toReal(args[2]);
-    int32_t targetObjIndex = RValue_toInt32(args[3]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[3]));
     int32_t prec = RValue_toInt32(args[4]);
     int32_t notme = RValue_toInt32(args[5]);
 
@@ -9669,7 +9669,7 @@ static RValue builtin_collision_rectangle_list(VMContext* ctx, RValue* args, int
     GMLReal y1 = RValue_toReal(args[1]);
     GMLReal x2 = RValue_toReal(args[2]);
     GMLReal y2 = RValue_toReal(args[3]);
-    int32_t target = RValue_toInt32(args[4]);
+    int32_t target = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[4]));
     int32_t prec = RValue_toInt32(args[5]);
     int32_t notme = RValue_toInt32(args[6]);
     int32_t listId = RValue_toInt32(args[7]);
@@ -9751,7 +9751,7 @@ static RValue builtin_collision_point(VMContext* ctx, RValue* args, int32_t argC
     Runner* runner = ctx->runner;
     GMLReal px = RValue_toReal(args[0]);
     GMLReal py = RValue_toReal(args[1]);
-    int32_t targetObjIndex = RValue_toInt32(args[2]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[2]));
     int32_t prec = RValue_toInt32(args[3]);
     int32_t notme = RValue_toInt32(args[4]);
 
@@ -9796,7 +9796,7 @@ static RValue builtin_instance_place(VMContext* ctx, RValue* args, int32_t argCo
 
     GMLReal testX = RValue_toReal(args[0]);
     GMLReal testY = RValue_toReal(args[1]);
-    int32_t targetObjIndex = RValue_toInt32(args[2]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[2]));
     if (targetObjIndex == INSTANCE_NOONE) return RValue_makeReal((GMLReal) INSTANCE_NOONE);
 
     GMLReal savedX = caller->x;
@@ -9852,7 +9852,7 @@ static RValue builtin_instance_place_list(VMContext* ctx, RValue* args, int32_t 
 
     GMLReal testX = RValue_toReal(args[0]);
     GMLReal testY = RValue_toReal(args[1]);
-    int32_t targetObjIndex = RValue_toInt32(args[2]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[2]));
     int32_t listId = RValue_toInt32(args[3]);
     // arg 4 (ordered) is currently ignored; instances are appended in iteration order
 
@@ -9911,7 +9911,7 @@ static RValue builtin_instance_position(VMContext* ctx, RValue* args, int32_t ar
     Runner* runner = ctx->runner;
     GMLReal px = RValue_toReal(args[0]);
     GMLReal py = RValue_toReal(args[1]);
-    int32_t targetObjIndex = RValue_toInt32(args[2]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[2]));
 
     if (runner->collisionCompatibilityMode) {
         px = compatRoundCoord(px); py = compatRoundCoord(py);
@@ -9945,7 +9945,7 @@ static RValue builtin_position_meeting(VMContext* ctx, RValue* args, int32_t arg
     Runner* runner = ctx->runner;
     GMLReal px = RValue_toReal(args[0]);
     GMLReal py = RValue_toReal(args[1]);
-    int32_t target = RValue_toInt32(args[2]);
+    int32_t target = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[2]));
     if (target == INSTANCE_NOONE) return RValue_makeBool(false);
 
     if (runner->collisionCompatibilityMode) {
