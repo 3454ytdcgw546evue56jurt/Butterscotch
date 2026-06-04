@@ -2316,6 +2316,16 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
 
     BinaryReader reader = BinaryReader_create(file, (size_t) fileSize);
 
+    // Some WAD files, such as ones made with https://github.com/AlexWaveDiver/TranslaTale (I think?) have pointers inside a chunk pointing to data in OTHER chunks
+    // The original runner doesn't care because it loads the entire file in memory up front, so we do the same if asked
+    // (we don't do that by default because some low end platforms would NOT be able to handle it)
+    uint8_t* wholeFileData = nullptr;
+    if (options.loadType == DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME) {
+        wholeFileData = safeMalloc((size_t) fileSize);
+        fread(wholeFileData, 1, (size_t) fileSize, file);
+        BinaryReader_setBuffer(&reader, wholeFileData, 0, (size_t) fileSize);
+    }
+
     // Validate FORM header
     char formMagic[4];
     BinaryReader_readBytes(&reader, formMagic, 4);
@@ -2428,7 +2438,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
 
         // Bulk-read the chunk data into memory for fast parsing
         uint8_t* chunkBuffer = nullptr;
-        if (shouldParse && chunkLength > 0) {
+        if (shouldParse && chunkLength > 0 && options.loadType != DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME) {
             chunkBuffer = safeMalloc(chunkLength);
             size_t read = fread(chunkBuffer, 1, chunkLength, reader.file);
             if (read != chunkLength) {
@@ -2514,7 +2524,11 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         }
 
         // Seek to chunk end (skip any unread data or trailing padding)
-        fseek(reader.file, (long) chunkEnd, SEEK_SET);
+        if (options.loadType == DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME) {
+            BinaryReader_seek(&reader, chunkEnd);
+        } else {
+            fseek(reader.file, (long) chunkEnd, SEEK_SET);
+        }
         chunkIndex++;
     }
 
@@ -2538,6 +2552,10 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         dw->lazyLoadFilePath = nullptr;
         dw->fileSize = 0;
         fclose(file);
+    }
+
+    if (wholeFileData != nullptr) {
+        free(wholeFileData);
     }
 
     return dw;
