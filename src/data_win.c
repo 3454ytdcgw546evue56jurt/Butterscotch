@@ -649,7 +649,7 @@ static void parseSOND(BinaryReader* reader, DataWin* dw) {
     free(ptrs);
 }
 
-static void parseAGRP(BinaryReader* reader, DataWin* dw, int32_t chunkEnd) {
+static void parseAGRP(BinaryReader* reader, DataWin* dw) {
     Agrp* a = &dw->agrp;
 
     uint32_t count;
@@ -662,15 +662,10 @@ static void parseAGRP(BinaryReader* reader, DataWin* dw, int32_t chunkEnd) {
 
     // GM 2024.14+ added a "path" parameter for each AudioGroup
     // To detect it, we'll check if the difference between two pointers is 8 (two int32)
+    // We CAN'T figure out if there aren't at least two AudioGroups, but for any meaningful purposes any game that has external AudioGroups WILL have
+    // at least two entries, one for the default AudioGroup and another for the external AudioGroup
     if (count >= 2) {
         uint32_t diff = ptrs[1] - ptrs[0];
-
-        if (diff >= 8) {
-            DataWin_bumpVersionTo(dw, 2024, 14, 0, 0);
-        }
-    } else if (count == 1) {
-        // If it only has one, we'll check the pointer to the chunk end difference
-        uint32_t diff = chunkEnd - ptrs[0];
 
         if (diff >= 8) {
             DataWin_bumpVersionTo(dw, 2024, 14, 0, 0);
@@ -682,6 +677,7 @@ static void parseAGRP(BinaryReader* reader, DataWin* dw, int32_t chunkEnd) {
         BinaryReader_seek(reader, ptrs[i]);
         a->audioGroups[i].present = true;
         a->audioGroups[i].name = readStringPtr(reader, dw);
+        fprintf(stderr, "%s\n", a->audioGroups[i].name);
         if (DataWin_isVersionAtLeast(dw, 2024, 14, 0, 0)) {
             a->audioGroups[i].path = readStringPtr(reader, dw);
         }
@@ -2602,7 +2598,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         } else if (options.parseSond && memcmp(chunkName, "SOND", 4) == 0) {
             parseSOND(&reader, dw);
         } else if (options.parseAgrp && memcmp(chunkName, "AGRP", 4) == 0) {
-            parseAGRP(&reader, dw, chunkEnd);
+            parseAGRP(&reader, dw);
         } else if (options.parseSprt && memcmp(chunkName, "SPRT", 4) == 0) {
             parseSPRT(&reader, dw, options.skipLoadingPreciseMasksForNonPreciseSprites);
         } else if (options.parseBgnd && memcmp(chunkName, "BGND", 4) == 0) {
