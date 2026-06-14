@@ -9195,26 +9195,6 @@ static RValue builtin_draw_text_ext(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     return RValue_makeUndefined();
 }
 
-static RValue builtin_draw_text_ext_color(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = ctx->runner;
-    if (runner->renderer == nullptr) return RValue_makeUndefined();
-
-    float x = (float) RValue_toReal(args[0]);
-    float y = (float) RValue_toReal(args[1]);
-    char* str = RValue_toString(args[2]);
-    int32_t separation = RValue_toInt32(args[3]);
-    int32_t width = RValue_toInt32(args[4]);
-
-    int32_t c1 = (float) RValue_toInt32(args[5]);
-    int32_t c2 = (float) RValue_toInt32(args[6]);
-    int32_t c3 = (float) RValue_toInt32(args[7]);
-    int32_t c4 = (float) RValue_toInt32(args[8]);
-
-    drawTextExtCommonColor(runner, str, x, y, 1.0f, 1.0f, 0.0f, separation, width, c1, c2, c3, c4);
-    free(str);
-    return RValue_makeUndefined();
-}
-
 static RValue builtin_draw_text_ext_transformed(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     if (runner->renderer == nullptr) return RValue_makeUndefined();
@@ -15290,16 +15270,15 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "draw_text", builtin_draw_text);
     VM_registerBuiltin(ctx, "draw_text_transformed", builtin_draw_text_transformed);
     VM_registerBuiltin(ctx, "draw_text_ext", builtin_draw_text_ext);
-    VM_registerBuiltin(ctx, "draw_text_ext_color", builtin_draw_text_ext_color);
+    VM_registerBuiltin(ctx, "draw_text_ext_color", builtin_draw_text_color_ext);
     VM_registerBuiltin(ctx, "draw_text_ext_transformed", builtin_draw_text_ext_transformed);
     VM_registerBuiltin(ctx, "draw_text_color", builtin_draw_text_color);
-    VM_registerBuiltin(ctx, "draw_text_color_transformed", builtin_draw_text_color_transformed);
-    VM_registerBuiltin(ctx, "draw_text_color_ext", builtin_draw_text_color_ext);
-    VM_registerBuiltin(ctx, "draw_text_color_ext_transformed", builtin_draw_text_color_ext_transformed);
+    VM_registerBuiltin(ctx, "draw_text_transformed_color", builtin_draw_text_color_transformed);
+    VM_registerBuiltin(ctx, "draw_text_ext_transformed_color", builtin_draw_text_color_ext_transformed);
     VM_registerBuiltin(ctx, "draw_text_colour", builtin_draw_text_color);
-    VM_registerBuiltin(ctx, "draw_text_colour_transformed", builtin_draw_text_color_transformed);
-    VM_registerBuiltin(ctx, "draw_text_colour_ext", builtin_draw_text_color_ext);
-    VM_registerBuiltin(ctx, "draw_text_colour_ext_transformed", builtin_draw_text_color_ext_transformed);
+    VM_registerBuiltin(ctx, "draw_text_ext_colour", builtin_draw_text_color_ext);
+    VM_registerBuiltin(ctx, "draw_text_transformed_colour", builtin_draw_text_color_transformed);
+    VM_registerBuiltin(ctx, "draw_text_ext_transformed_colour", builtin_draw_text_color_ext_transformed);
     VM_registerBuiltin(ctx, "draw_surface", builtin_draw_surface);
     VM_registerBuiltin(ctx, "draw_surface_ext", builtin_draw_surface_ext);
     VM_registerBuiltin(ctx, "draw_surface_part", builtin_draw_surface_part);
