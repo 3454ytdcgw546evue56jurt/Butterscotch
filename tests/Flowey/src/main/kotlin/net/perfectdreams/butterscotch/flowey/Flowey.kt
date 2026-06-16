@@ -10,8 +10,8 @@ import com.typesafe.config.ConfigFactory
 import kotlinx.serialization.hocon.Hocon
 import kotlinx.serialization.hocon.decodeFromConfig
 import java.io.File
-import java.util.Collections
 import java.util.concurrent.TimeUnit
+import javax.imageio.ImageIO
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
@@ -70,6 +70,27 @@ class Flowey : CliktCommand() {
             for (pack in test.expectedStderrOutput) {
                 if (stderrLines.windowed(pack.size).indexOf(pack) == -1)
                     continue@testLoop
+            }
+
+            for (pack in test.expectedScreenshots) {
+                val expected = File(testSuite.parentFile, pack.actual)
+                val actual = File(testSuite.parentFile, pack.expected)
+
+                val expectedImage = ImageIO.read(expected)
+                val actualImage = ImageIO.read(actual)
+
+                if (expectedImage.width != actualImage.width || expectedImage.height != actualImage.height)
+                    continue
+
+                for (y in 0 until expectedImage.height) {
+                    for (x in 0 until expectedImage.width) {
+                        val expectedPixel = expectedImage.getRGB(x, y)
+                        val actualPixel = actualImage.getRGB(x, y)
+
+                        if (expectedPixel != actualPixel)
+                            continue@testLoop
+                    }
+                }
             }
 
             result.success = true
