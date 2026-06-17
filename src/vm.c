@@ -745,48 +745,6 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
         return result;
     }
 
-#if IS_WAD17_OR_HIGHER_ENABLED
-    // BC17+: instanceType == INSTANCE_BUILTIN (-6) on a Push.v means "look up this name as a function reference" (emitted for CallV dispatch paths like `@@This@@(); texture_set_interpolation_ext; CallV`).
-    // Intercept before the builtin-variable path: only treat it as a function if the VARI entry isn't a real built-in variable (varID == -6 with a resolved builtinVarId).
-    if (IS_WAD17_OR_HIGHER(ctx) && instanceType == INSTANCE_BUILTIN && !(varDef->varID == VARIABLE_BUILTIN && varDef->builtinVarId != -1)) {
-        // `@@This@@(); push.v bltn.<name>; CallV` is also used for `self.method()` where `method` is a user-defined method stored on the instance (e.g. `init = method(...)` on an object).
-        // CallV pops [func, instance, args], so the instance is sitting right below the func we're about to push. Peek at it and try to read `<name>` off its selfVars first; if the VARI entry has a self scope and the peeked slot resolves to an instance with the field, return that method. Otherwise fall through to global function lookup.
-        if (varDef->instanceType == INSTANCE_SELF && ctx->stack.top > 0) {
-            RValue* peek = stackPeek(ctx);
-            int32_t peekId = RValue_toInt32(*peek);
-            Instance* peekInst = findInstanceByTarget(ctx, peekId);
-            if (peekInst != nullptr) {
-                RValue value;
-                if (tryReadInstanceVarOrStatic(ctx, peekInst, varDef->varID, &access, &value))
-                    return value;
-            }
-        }
-
-        // GameMaker emits a "push builtin" inside a function for "read this as a self-variable"
-        if (varDef->instanceType == INSTANCE_SELF && ctx->currentInstance != nullptr) {
-            Instance* self = (Instance*) ctx->currentInstance;
-            RValue value;
-            if (tryReadInstanceVarOrStatic(ctx, self, varDef->varID, &access, &value))
-                return value;
-        }
-
-        // Then try user scripts/code entries (funcMap maps both "funcName" and "gml_Script_funcName")
-        ptrdiff_t mapIdx = shgeti(ctx->codeIndexByName, varDef->name);
-        if (mapIdx >= 0) {
-            int32_t codeIndex = ctx->codeIndexByName[mapIdx].value;
-            return RValue_makeMethodFromCodeIndexAndInstanceId(codeIndex, -1);
-        }
-        // Then try registered built-ins
-        ptrdiff_t bidx = shgeti(ctx->builtinMap, (char*) varDef->name);
-        if (bidx >= 0) {
-            BuiltinFunc bf = ctx->builtinMap[bidx].value;
-            return RValue_makeMethod(GMLMethod_createBuiltin(bf, -1));
-        }
-        // Unresolved: return a method stub so CallV can log a single "unknown function" and return undefined instead of bailing out with a scary "unresolvable function reference" error.
-        return RValue_makeMethod(GMLMethod_createUnresolved(varDef->name, -1));
-    }
-#endif
-
     // Check for built-in variable (varID == -6 sentinel)
     if (varDef->varID == VARIABLE_BUILTIN) {
         // Structs aren't real game instances, but structs CAN store fields with the same names as built-ins.
