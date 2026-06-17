@@ -1481,6 +1481,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         repeat(assets->spriteCount, j) {
             SpriteInstance* src = &assets->sprites[j];
             RuntimeSpriteElement* spriteElement = safeMalloc(sizeof(RuntimeSpriteElement));
+            spriteElement->name = src->name;
             spriteElement->spriteIndex = src->spriteIndex;
             spriteElement->x = src->x;
             spriteElement->y = src->y;

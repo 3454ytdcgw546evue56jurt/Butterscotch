@@ -196,6 +196,7 @@ typedef struct {
 
 // Mutable sprite element on an Assets layer. Populated from RoomLayerAssetsData.sprites at room init, can be removed at runtime via layer_sprite_destroy (used by language variant selection).
 typedef struct {
+    const char* name; // not owned, can be null if dynamically created
     int32_t spriteIndex; // SPRT index (-1 = none/destroyed)
     int32_t x;
     int32_t y;

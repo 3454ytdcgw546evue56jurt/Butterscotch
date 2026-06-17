@@ -12585,6 +12585,32 @@ static RValue builtin_layer_tile_visible(VMContext* ctx, RValue* args, MAYBE_UNU
     return RValue_makeUndefined();
 }
 
+static RValue builtin_layer_sprite_get_id(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    // TODO: What's exactly is the "String" in this function?
+    logSemiStubbedFunction(ctx, "layer_sprite_get_id");
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+
+    RuntimeLayer* layer = Runner_findRuntimeLayerById(runner, id);
+    if (layer == nullptr)
+        return RValue_makeReal(-1.0);
+
+    char* name = RValue_toString(args[1]);
+
+    repeat(arrlen(layer->elements), i) {
+        RuntimeLayerElement* element = &layer->elements[i];
+        if (element->type == RuntimeLayerElementType_Sprite) {
+            if (element->spriteElement->name != nullptr && strcmp(element->spriteElement->name, name) == 0) {
+                free(name);
+                return RValue_makeReal(element->id);
+            }
+        }
+    }
+
+    free(name);
+    return RValue_makeReal(-1.0);
+}
+
 static RValue builtin_layer_sprite_get_sprite(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -15633,6 +15659,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "layer_instance_get_instance", builtin_layer_instance_get_instance);
 #endif
     VM_registerBuiltin(ctx, "layer_get_element_type", builtin_layer_get_element_type);
+    VM_registerBuiltin(ctx, "layer_sprite_get_id", builtin_layer_sprite_get_id);
     VM_registerBuiltin(ctx, "layer_sprite_get_sprite", builtin_layer_sprite_get_sprite);
     VM_registerBuiltin(ctx, "layer_sprite_get_x", builtin_layer_sprite_get_x);
     VM_registerBuiltin(ctx, "layer_sprite_get_y", builtin_layer_sprite_get_y);
