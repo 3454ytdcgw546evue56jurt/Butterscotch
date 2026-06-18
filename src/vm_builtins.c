@@ -3914,6 +3914,10 @@ static RValue builtin_method(VMContext* ctx, MAYBE_UNUSED RValue* args, int32_t 
             }
         }
 
+        if (instanceToBeBound == INSTANCE_SELF) {
+            instanceToBeBound = requireNotNullMessage(ctx->currentInstance, "Trying to bind method to INSTANCE_SELF while there isn't a instance in the current context!")->instanceId;
+        }
+
         return RValue_makeMethodFromCodeIndexAndInstanceId(codeIndex, instanceToBeBound);
     }
 }
