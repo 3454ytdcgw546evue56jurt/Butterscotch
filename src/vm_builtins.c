@@ -3890,6 +3890,99 @@ static RValue builtin_struct_get_names(VMContext* ctx, RValue* args, int32_t arg
     return RValue_makeArray(array);
 }
 
+// ===[ STRUCT FUNCTIONS ]===
+static RValue builtin_struct_exists(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 2 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr ||  args[1].type != RVALUE_STRING) {return RValue_makeBool(false);}
+    
+    bool exists = variableScopedGet(ctx,args[0].structInst->instanceId,args[1].string,true,"struct_exists").type != RVALUE_UNDEFINED;
+
+    return RValue_makeBool(exists);
+}
+
+static RValue builtin_struct_get(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 2 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_STRING) {return RValue_makeUndefined();}
+
+    RValue Struct_Valriable = variableScopedGet(ctx,args[0].structInst->instanceId,args[1].string,true,"struct_get");
+
+    return Struct_Valriable;
+}
+
+static RValue builtin_struct_set(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 3 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_STRING) {return RValue_makeUndefined();}
+
+    variableScopedSet(ctx,args[0].structInst->instanceId,args[1].string,args[2],true,"struct_set");
+
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_struct_names_count(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 1 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr) {return RValue_makeUndefined();}
+
+    uint32_t struct_names_count = args[0].structInst->selfVars.count;
+
+    return RValue_makeReal(struct_names_count);
+}
+
+static RValue builtin_struct_remove(VMContext* ctx, RValue* args, int32_t argCount){
+    if(argCount < 2 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_STRING) {return RValue_makeUndefined();}
+    
+    //Avoiding creating a new entry when removing variable from struct
+    if(variableScopedGet(ctx,args[0].structInst->instanceId,args[1].string,true,"struct_exists").type == RVALUE_UNDEFINED)
+    {
+        return RValue_makeUndefined();
+    }
+
+    variableScopedSet(ctx,args[0].structInst->instanceId,args[1].string,RValue_makeUndefined(),true,"struct_set");
+    
+    return RValue_makeUndefined();
+}
+
+//Hash struct functions
+static RValue builtin_struct_get_from_hash(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 2 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_REAL) {return RValue_makeUndefined();}
+
+    RValue Struct_Valriable = Instance_getSelfVar(args[0].structInst,args[1].real);
+
+    return Struct_Valriable;
+}
+
+static RValue builtin_struct_set_from_hash(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 3 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_REAL) {return RValue_makeUndefined();}
+
+    Instance_setSelfVar(args[0].structInst,args[1].real,args[2]);
+
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_struct_exists_from_hash(VMContext* ctx, RValue* args, int32_t argCount)
+{
+    if(argCount < 2 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_REAL) {return RValue_makeBool(false);}
+    
+    bool exists = Instance_getSelfVar(args[0].structInst,args[1].real).type != RVALUE_UNDEFINED;
+
+    return RValue_makeBool(exists);
+}
+
+static RValue builtin_struct_remove_from_hash(VMContext* ctx, RValue* args, int32_t argCount) {
+    if(argCount < 2 || args[0].type != RVALUE_STRUCT || args[0].structInst == nullptr || args[1].type != RVALUE_REAL) {return RValue_makeUndefined();}
+    
+    //Avoiding creating a new entry when removing variable from struct
+    if(Instance_getSelfVar(args[0].structInst,args[1].real).type == RVALUE_UNDEFINED)
+    {
+        return RValue_makeUndefined();
+    }
+
+    Instance_setSelfVar(args[0].structInst,args[1].real,RValue_makeUndefined());
+    
+    return RValue_makeUndefined();
+}
+
 // ===[ METHOD ]===
 
 #if IS_WAD17_OR_HIGHER_ENABLED
@@ -15224,6 +15317,17 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "variable_struct_exists", builtin_variable_struct_exists);
     VM_registerBuiltin(ctx, "struct_get_names", builtin_struct_get_names);
     VM_registerBuiltin(ctx, "variable_instance_get_names", builtin_struct_get_names); // I couldn't find any noticeable different behavior when testing this
+
+    //struct
+    VM_registerBuiltin(ctx, "struct_exists", builtin_struct_exists);
+    VM_registerBuiltin(ctx, "struct_get", builtin_struct_get);
+    VM_registerBuiltin(ctx, "struct_set", builtin_struct_set);
+    VM_registerBuiltin(ctx, "struct_names_count", builtin_struct_names_count);
+    VM_registerBuiltin(ctx, "struct_remove", builtin_struct_remove);
+    VM_registerBuiltin(ctx, "struct_get_from_hash", builtin_struct_get_from_hash);
+    VM_registerBuiltin(ctx, "struct_set_from_hash", builtin_struct_set_from_hash);
+    VM_registerBuiltin(ctx, "struct_exists_from_hash", builtin_struct_exists_from_hash);
+    VM_registerBuiltin(ctx, "struct_remove_from_hash", builtin_struct_remove_from_hash);
 
     // Script
     VM_registerBuiltin(ctx, "script_execute", builtin_script_execute);
