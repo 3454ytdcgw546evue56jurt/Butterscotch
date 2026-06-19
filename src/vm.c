@@ -304,10 +304,10 @@ static GMLArray* VM_arraySetWithCoW(VMContext* ctx, RValue* slot, int32_t index,
 }
 
 // Creates a copy of "name"
-int32_t VM_getOrAllocateSelfVarID(VMContext* ctx, const char* name) {
+int32_t VM_getOrAllocateVarID(VMContext* ctx, const char* name) {
     ptrdiff_t slot = shgeti(ctx->varNameMap, name);
     if (slot >= 0) return ctx->varNameMap[slot].value;
-    int32_t id = ctx->nextDynamicSelfVarID++;
+    int32_t id = ctx->nextDynamicVarID++;
     shput(ctx->varNameMap, safeStrdup(name), id);
     return id;
 }
@@ -349,7 +349,7 @@ RValue VM_structGetVariableByVarName(VMContext* ctx, Instance* structInst, const
 // This should ONLY be used for structs!
 void VM_structSet(VMContext* ctx, Instance* structInst, const char* name, RValue val, int32_t arrayIndex) {
     requireMessageFormatted(__FILE__, __LINE__, structInst->objectIndex == STRUCT_OBJECT_INDEX, "Trying to use VM_structSet on a instance that isn't a struct! objectIndex=%d", structInst->objectIndex);
-    int32_t varID = VM_getOrAllocateSelfVarID(ctx, name);
+    int32_t varID = VM_getOrAllocateVarID(ctx, name);
     if (arrayIndex >= 0) {
         RValue* slot = IntRValueHashMap_getOrInsertUndefined(&structInst->selfVars, varID);
         VM_arraySetWithCoW(ctx, slot, arrayIndex, val);
@@ -522,7 +522,6 @@ static inline bool tryFastVarRead(VMContext* ctx, int32_t instanceType, Variable
         }
         case INSTANCE_GLOBAL: {
             Instance* inst = (Instance*) ctx->globalScopeInstance;
-            if (inst == nullptr) return false;
             RValue* slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
             if (slot == nullptr)
                 return false;
@@ -687,6 +686,8 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
             }
             return RValue_makeReal(0.0);
         }
+    } else if (instanceType == INSTANCE_GLOBAL) {
+        targetInstance = ctx->globalScopeInstance;
     } else if (instanceType == INSTANCE_OTHER) {
         if (ctx->otherInstance != nullptr) {
             targetInstance = (Instance*) ctx->otherInstance;
@@ -760,10 +761,6 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
 #endif
 
         return result;
-    }
-
-    if (instanceType == INSTANCE_GLOBAL) {
-        targetInstance = ctx->globalScopeInstance;
     }
 
     // Resolve the variable's scalar slot pointer for the target scope. Array-valued vars live inline as RVALUE_ARRAY in the same slot.
@@ -2125,7 +2122,12 @@ static void handleCallV(VMContext* ctx, uint32_t instr) {
         result = RValue_makeUndefined();
     } else {
         fprintf(stderr, "VM: [%s] CALLV with unresolvable function reference (type=%d, codeIndex=%d)\n", ctx->currentCodeName, function.type, codeIndex);
+#ifdef ENABLE_WAD17
+        VMException* exception = safeCalloc(1, sizeof(VMException));
+        exception->message = safeStrdup("CALLV with unresolvable function reference");
+        ctx->exception = exception;
         result = RValue_makeUndefined();
+#endif
     }
 
     ctx->currentInstance = savedSelf;
@@ -2755,6 +2757,14 @@ static inline RValue scriptFallthroughReturnValue(VMContext* ctx) {
     return RValue_makeReal(0.0);
 }
 
+// Unwinds and frees the VMStack down to the newStackTop
+static void unwindVMStack(VMContext* ctx, int32_t newStackTop) {
+    repeat(ctx->stack.top - newStackTop, i) {
+        RValue_free(&ctx->stack.slots[i + newStackTop]);
+    }
+    ctx->stack.top = newStackTop;
+}
+
 static RValue executeLoop(VMContext* ctx) {
     // codeEnd and bytecodeBase are invariant for the lifetime of this executeLoop call, so let's hoist them to avoid the compiler emitting code to
     // reload the values at the end of every iteration.
@@ -2767,6 +2777,59 @@ static RValue executeLoop(VMContext* ctx) {
     // Some opcodes have their handler or parts of their handler inlined
     // Those are opcodes that during real gameplay (using "--profile-opcodes") shown that, with inlining and keeping only the frequently called handle parts, we could squeeze MORE performance from the interpreter!
     while (codeEnd > ip) {
+#ifdef ENABLE_WAD17
+        if (ctx->exception != nullptr) {
+#ifdef ENABLE_VM_EXCEPTIONS_LOGS
+            fprintf(stderr, "VM: Exception thrown! Stack Top is %d\n", ctx->exceptionHandlerStackTop);
+#endif
+            if (ctx->exceptionHandlerStackTop == 0) {
+                // TODO: When Butterscotch is better, we could have a strict mode that DOES throw a error
+                fprintf(stderr, "VM: The exception handler frame stack is 0, but we have a pending exception to be dispatched! This would've technically crashed the game in the original runner... or we aren't handling exceptions correctly. We'll swallow the exception and hope for the best... (Exception: %s)\n", ctx->exception->message);
+                free(ctx->exception->message);
+                free(ctx->exception);
+                ctx->exception = nullptr;
+                return RValue_makeUndefined();
+            }
+
+            // Restore caller frame
+            ExceptionHandlerFrame* exceptionHandlerFrame = &ctx->exceptionHandlerFrameStack[ctx->exceptionHandlerStackTop - 1];
+
+            // Not for us, propagate the exception!
+            if (exceptionHandlerFrame->boundToCallDepth != ctx->callDepth) {
+#ifdef ENABLE_VM_EXCEPTIONS_LOGS
+                fprintf(stderr, "VM: We wanted %d but we are %d - Propagating...\n", exceptionHandlerFrame->boundToCallDepth, ctx->callDepth);
+#endif
+                return RValue_makeUndefined();
+            }
+
+            // We DO NOT want to pop the handler, it will be popped by @@try_unhook@@
+            bool isException = exceptionHandlerFrame->jumpToOnException != -1;
+            ip = isException ? exceptionHandlerFrame->jumpToOnException : exceptionHandlerFrame->jumpToOnSuccess;
+            unwindVMStack(ctx, exceptionHandlerFrame->stackTop);
+
+            VM_SYNC_IP();
+
+#ifdef ENABLE_VM_EXCEPTIONS_LOGS
+            fprintf(stderr, "VM: Jumped to %d due to exception handler, is this a exception? %d\n", ip, isException);
+#endif
+
+            if (isException) {
+                // On a exception, GameMaker pops the struct and stores it in the variable of the "catch (_nameOfTheExceptionHere) {"
+                Instance* gmlStruct = Runner_createStruct(ctx->runner);
+                // TODO: longMessage/script/stacktrace
+                VM_structSet(ctx, gmlStruct, "message", RValue_makeOwnedString(safeStrdup(ctx->exception->message)), -1);
+                stackPush(ctx, RValue_makeStructAndIncRef(gmlStruct));
+                free(ctx->exception->message);
+                free(ctx->exception);
+            } else {
+                // Will be unparked by finish_finally
+                ctx->parkedException = ctx->exception;
+            }
+
+            ctx->exception = nullptr;
+        }
+#endif
+
 #ifdef ENABLE_VM_GML_PROFILER
         if (ctx->profiler != nullptr)
             Profiler_tickInstruction(ctx->profiler);
@@ -2829,9 +2892,9 @@ static RValue executeLoop(VMContext* ctx) {
                 char* stackBuf = formatStackContents(ctx);
 
                 if (operandStr[0] != '\0') {
-                    fprintf(stderr, "VM: [%s] @%04X [0x%08X] %s %s [stack=%d] %s\n", ctx->currentCodeName, instrAddr, instr, opcodeStr, operandStr, ctx->stack.top, stackBuf);
+                    fprintf(stderr, "VM: [%s] @%04X (%d) [0x%08X] %s %s [stack=%d] %s\n", ctx->currentCodeName, instrAddr, instrAddr, instr, opcodeStr, operandStr, ctx->stack.top, stackBuf);
                 } else {
-                    fprintf(stderr, "VM: [%s] @%04X [0x%08X] %s [stack=%d] %s\n", ctx->currentCodeName, instrAddr, instr, opcodeStr, ctx->stack.top, stackBuf);
+                    fprintf(stderr, "VM: [%s] @%04X (%d) [0x%08X] %s [stack=%d] %s\n", ctx->currentCodeName, instrAddr, instrAddr, instr, opcodeStr, ctx->stack.top, stackBuf);
                 }
                 free(stackBuf);
             }
@@ -3436,14 +3499,16 @@ VMContext* VM_create(DataWin* dataWin) {
     ctx->varNameMap = nullptr;
     int32_t maxSelfVarID = 0;
     forEach(Variable, variable, dataWin->vari.variables, dataWin->vari.variableCount) {
-        ptrdiff_t existing = shgeti(ctx->varNameMap, (char*) variable->name);
-        if (0 > existing) {
-            shput(ctx->varNameMap, (char*) safeStrdup(variable->name), variable->varID);
+        if (variable->varID >= 0) {
+            ptrdiff_t existing = shgeti(ctx->varNameMap, (char*) variable->name);
+            if (0 > existing) {
+                shput(ctx->varNameMap, (char*) safeStrdup(variable->name), variable->varID);
+            }
+            if (variable->varID > maxSelfVarID)
+                maxSelfVarID = variable->varID;
         }
-        if (variable->varID > maxSelfVarID)
-            maxSelfVarID = variable->varID;
     }
-    ctx->nextDynamicSelfVarID = maxSelfVarID + 1;
+    ctx->nextDynamicVarID = maxSelfVarID + 1;
 
     // Build funcName -> codeIndex hash map from SCPT chunk
     ctx->codeIndexByName = nullptr;
@@ -3567,6 +3632,17 @@ void VM_reset(VMContext* ctx) {
     Instance_free(ctx->globalScopeInstance);
     ctx->globalScopeInstance = Instance_create(0, STRUCT_OBJECT_INDEX, 0, 0);
 
+#ifdef ENABLE_WAD17
+    if (ctx->parkedException != nullptr) {
+        free(ctx->parkedException->message);
+        free(ctx->parkedException);
+    }
+    if (ctx->exception != nullptr) {
+        free(ctx->exception->message);
+        free(ctx->exception);
+    }
+#endif
+
     fprintf(stderr, "VM: Reset complete\n");
 }
 
@@ -3633,6 +3709,12 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     ctx->localVars = nullptr;
     ctx->localVarCount = 0;
 
+    // Reset all values in the stack (see issue #137)
+    // Keep in mind that recent GameMaker versions do seem to emit Pop/Popz when exiting loops (example: when using a repeat + return) but older versions DO need it
+    unwindVMStack(ctx, 0);
+
+    ctx->stack.top = 0;
+
     return result;
 }
 
@@ -3657,6 +3739,8 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     frame.parent = ctx->callStack;
     ctx->callStack = &frame;
     ctx->callDepth++;
+
+    int32_t storedStackTop = ctx->stack.top;
 
     // Set up callee
     ctx->bytecodeBase = ctx->dataWin->bytecodeBuffer + (code->bytecodeAbsoluteOffset - ctx->dataWin->bytecodeBufferBase);
@@ -3733,6 +3817,10 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     ctx->savearefBalance = saved->savedSavearefBalance;
     ctx->callStack = saved->parent;
     ctx->callDepth--;
+
+    // Reset all values in the stack (see issue #137)
+    // Keep in mind that recent GameMaker versions do seem to emit Pop/Popz when exiting loops (example: when using a repeat + return) but older versions DO need it
+    unwindVMStack(ctx, storedStackTop);
 
     return result;
 }
@@ -4293,9 +4381,9 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
 
         // Print the formatted line
         if (commentStr[0] != '\0') {
-            printf("%*s%04X: [0x%08X] %-16s %-45s %s\n", indent, "", instrAddr, instr, opcodeStr, operandStr, commentStr);
+            printf("%*s%04X (%6d): [0x%08X] %-16s %-45s %s\n", indent, "", instrAddr, instrAddr, instr, opcodeStr, operandStr, commentStr);
         } else {
-            printf("%*s%04X: [0x%08X] %-16s %s\n", indent, "", instrAddr, instr, opcodeStr, operandStr);
+            printf("%*s%04X (%6d): [0x%08X] %-16s %s\n", indent, "", instrAddr, instrAddr, instr, opcodeStr, operandStr);
         }
 
         // PushEnv increases depth after printing

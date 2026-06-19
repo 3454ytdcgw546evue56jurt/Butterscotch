@@ -147,8 +147,16 @@ typedef struct EnvFrame {
     struct EnvFrame* parent;
 } EnvFrame;
 
+typedef struct {
+    int32_t jumpToOnException;
+    int32_t jumpToOnSuccess;
+    int32_t boundToCallDepth;
+    int32_t stackTop;
+} ExceptionHandlerFrame;
+
 // ===[ VMStack - Upward-growing array of RValue slots ]===
 #define VM_STACK_SIZE 1024
+#define VM_EXCEPTION_HANDLER_FRAME_STACK_SIZE 16
 
 typedef struct {
     int32_t top;
@@ -172,6 +180,10 @@ typedef struct {
     char* key;
     BuiltinFunc value;
 } BuiltinEntry;
+
+typedef struct {
+    char* message;
+} VMException;
 
 // ===[ VMContext - Holds all VM state ]===
 // Fields are ordered by access frequency so that the hottest data sits in the first bytes of the struct
@@ -221,6 +233,12 @@ struct VMContext {
     void* currentArrayOwner;
     // SAVEAREF/RESTOREAREF balance tracker.
     int32_t savearefBalance;
+#ifdef ENABLE_WAD17
+    VMException* exception;
+    VMException* parkedException;
+    int32_t exceptionHandlerStackTop;
+    ExceptionHandlerFrame exceptionHandlerFrameStack[VM_EXCEPTION_HANDLER_FRAME_STACK_SIZE];
+#endif
 
     // Cold: init-only or rare lookups
     BuiltinEntry* builtinMap;
@@ -233,7 +251,7 @@ struct VMContext {
     IntIntHashMap* codeLocalsSlotMaps;
     // varName -> varID hash map for self/instance-scoped variables (stb_ds).
     struct { char* key; int32_t value; }* varNameMap;
-    int32_t nextDynamicSelfVarID;
+    int32_t nextDynamicVarID;
     // "codeName\tfuncName" -> true, for deduplicating unknown function warnings
     StringBooleanEntry* loggedUnknownFuncs;
     // "codeName\tfuncName" -> true, for deduplicating stubbed function warnings
@@ -304,7 +322,7 @@ void VM_structSetAndFreeVal(VMContext* ctx, Instance* structInst, const char* na
 void VM_copyStatic(VMContext* ctx, RValue* parentRef);
 
 // Look up the varID for a self-scoped variable name, allocating a fresh synthetic ID if absent.
-int32_t VM_getOrAllocateSelfVarID(VMContext* ctx, const char* name);
+int32_t VM_getOrAllocateVarID(VMContext* ctx, const char* name);
 
 // Writes to the VMContext's scriptArgs, resizing the underlying array if needed
 // The "val" will be RValue_makeIndependent(val), it won't be freed
