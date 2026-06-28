@@ -1,7 +1,4 @@
-build/
-build_pc/
-build_ps2/
-build_ps3/
+build*/
 .gitignore
 .cache
 CMakeUserPresets.json
