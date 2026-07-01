@@ -72,6 +72,18 @@ check() {
     fi
 }
 
+checkdefine() {
+    printf '%s' "\
+#ifndef $1
+#error not defined
+#endif
+int main(void){return 0;}
+" > tmp/test.c
+
+    nolink=1 check "if $1 is defined"
+    return $?
+}
+
 printf '%s' "\
 int main(void){return 0;}
 " > tmp/test.c
@@ -121,6 +133,21 @@ else
     printyes
     cross_compiling=1
 fi
+
+configlog 'checking the target OS'
+if checkdefine '_WIN32' > /dev/null; then
+    printgreen 'windows'
+    config 'OS := Windows'
+elif checkdefine '__APPLE__' > /dev/null; then
+    printgreen 'darwin'
+    config 'OS := Darwin'
+else
+    printgreen 'unix'
+fi
+
+printf '%s' "\
+int main(void){return 0;}
+" > tmp/test.c
 
 if [ "$syntax" != 'msvc' ] && nolink=1 check 'if the compiler supports -fno-builtin' -fno-builtin; then
     # function tests might have false positives without this
