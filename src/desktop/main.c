@@ -35,6 +35,7 @@
 #ifdef ENABLE_LEGACY_GL
 #include "gl_legacy_renderer.h"
 #endif
+#include "gl_wrappers.h"
 #endif
 #ifdef ENABLE_SW_RENDERER
 #include "sw_renderer.h"
@@ -64,7 +65,71 @@
 
 enum GraphicsAPI gfx;
 
-#if !defined(ENABLE_GLES) && (defined(ENABLE_MODERN_GL) || defined(ENABLE_LEGACY_GL))
+#if defined(ENABLE_LEGACY_GL) || defined(ENABLE_MODERN_GL)
+const GLuint *hostFramebuffer;
+#endif
+
+#ifdef __linux__
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
+static size_t get_used_memory(void) {
+#ifdef __linux__
+    int fd = open("/proc/self/smaps_rollup", O_RDONLY);
+    if (fd < 0)
+        return 0;
+
+    char buf[512];
+    int n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0)
+        return 0;
+    buf[n] = '\0';
+
+    char *p = buf;
+    while (*p) {
+        if (strncmp(p, "Anonymous:", 10) == 0) {
+            p += 10;
+            while (*p == ' ' || *p == '\t')
+                p++;
+            size_t kb = 0;
+            while (*p >= '0' && *p <= '9')
+                kb = kb * 10 + (size_t)(*p++ - '0');
+            return kb * 1024;
+        }
+        while (*p && *p != '\n')
+            p++;
+        if (*p)
+            p++;
+    }
+#endif
+    return 0;
+}
+
+#if defined(ENABLE_LEGACY_GL) || defined(ENABLE_MODERN_GL) || ((defined(USE_GLFW3) || defined(USE_GLFW2)) && defined(ENABLE_SW_RENDERER))
+static int platformInitGlad(GLADloadproc load) {
+    glGetString = (PFNGLGETSTRINGPROC)load("glGetString");
+    const char *version;
+    if (glGetString) {
+        version = (const char*)glGetString(GL_VERSION);
+    } else
+        return 0;
+    // Load OpenGL function pointers via GLAD
+    // This will need to be modified if we ever want to support GLES 1.x
+    if (version && strstr(version, "OpenGL ES")) {
+        if (!gladLoadGLES2Loader(platformGetProcAddress))
+            return 0;
+        return 2;
+    } else {
+        if (!gladLoadGLLoader(platformGetProcAddress))
+            return 0;
+        return 1;
+    }
+}
+#endif
+
+#if (defined(ENABLE_MODERN_GL) || defined(ENABLE_LEGACY_GL)) && !defined(NDEBUG)
 static void APIENTRY glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, MAYBE_UNUSED GLsizei length, const GLchar* message, MAYBE_UNUSED const void* userParam) {
     const char* sourceStr;
     switch (source) {
@@ -104,15 +169,28 @@ static void APIENTRY glDebugCallback(GLenum source, GLenum type, GLuint id, GLen
 }
 
 static void installGLDebugCallback(void) {
-    if (!GLAD_GL_KHR_debug) {
-        fprintf(stderr, "OpenGL debug callback not available (driver does not expose GL_KHR_debug)\n");
+    if (glDebugMessageCallback && glDebugMessageControl) {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(glDebugCallback, NULL);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
         return;
     }
 
-    glEnable(GL_DEBUG_OUTPUT);
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glDebugMessageCallbackKHR(glDebugCallback, nullptr);
-    glDebugMessageControlKHR(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+    if (glDebugMessageCallbackKHR && glDebugMessageControlKHR) {
+        glEnable(GL_DEBUG_OUTPUT_KHR);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
+        glDebugMessageCallbackKHR(glDebugCallback, NULL);
+        glDebugMessageControlKHR(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
+        return;
+    }
+
+    if (glDebugMessageCallbackARB && glDebugMessageControlARB) {
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+        glDebugMessageCallbackARB(glDebugCallback, NULL);
+        glDebugMessageControlARB(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
+        return;
+    }
 }
 #endif
 
@@ -357,6 +435,8 @@ static void printUsage(const char *argv0) {
         "    --profile-gml-scripts                  - Log which GML scripts are the heaviest in terms of time and executed instructions\n"
         "    --save-folder <directory>              - Set the directory will save files will be stored\n"
         "    --game-args <args>                     - Arguments to pass to the game\n"
+        "    --lazy-textures                        - Load textures into VRAM on first use, improving startup times\n"
+        "    --load-type <type>                     - Specify how data.win is loaded, per-chunk or all at once\n"
 #ifdef EABLE_VM_OPCODE_PROFILER
         "    --profile-opcodes                      - Rank which GML opcodes were executed the most\n"
 #endif
@@ -432,7 +512,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     args->loadType = DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME;
     // TODO: detect available driver features
     // at runtime to improve defaults.
-#if defined(ENABLE_MODERN_GL) && (defined(USE_GLFW3) || defined(USE_SDL2) || defined(USE_SDL3))
+#if defined(ENABLE_MODERN_GL)
     args->renderer = "modern-gl";
 #elif defined(ENABLE_LEGACY_GL)
     args->renderer = "legacy-gl";
@@ -760,10 +840,10 @@ static void freeCommandLineArgs(CommandLineArgs* args) {
 #if defined(ENABLE_LEGACY_GL) || defined(ENABLE_MODERN_GL)
 // When flipY is true, the image will be flipped vertically.
 static void writeFramebufferAsPng(GLuint fbo, int width, int height, const char* filename, const char* logPrefix, bool forceOpaque, bool flipY) {
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
     int stride = width * 4;
-    unsigned char* pixels = safeMalloc(stride * height);
+    unsigned char* pixels = (unsigned char *)safeMalloc(stride * height);
     if (pixels == nullptr) {
         fprintf(stderr, "Error: Failed to allocate memory for %s (%dx%d)\n", logPrefix, width, height);
         return;
@@ -785,7 +865,7 @@ static void writeFramebufferAsPng(GLuint fbo, int width, int height, const char*
     }
 
     free(pixels);
-    printf("%s: %s (%dx%d)\n", logPrefix, filename, width, height);
+    fprintf(stderr, "%s: %s (%dx%d)\n", logPrefix, filename, width, height);
 }
 
 static void captureScreenshot(GLuint fbo, const char* filenamePattern, int frameNumber, int width, int height, bool flipY) {
@@ -810,7 +890,7 @@ static void dumpAllSurfaces(GLRenderer* gl, const char* filenamePattern, int fra
         writeFramebufferAsPng(gl->surfaces[surfaceId], width, height, filename, "Surface dump", false, false);
     }
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, *hostFramebuffer);
 }
 #endif
 
@@ -890,7 +970,7 @@ char* collapseNewlines(const char *input) {
     }
 
     size_t len = strlen(input);
-    char *result = malloc(len + 1);
+    char *result = (char *)malloc(len + 1);
     if (result == nullptr) {
         return nullptr;
     }
@@ -936,8 +1016,9 @@ int main(int argc, char* argv[]) {
     bool platformInitialized = false;
     int32_t inputFrameCount = 0;
 
+    int glad_ret;
     while (true) {
-        printf("Loading %s...\n", args.dataWinPath);
+        fprintf(stderr, "Loading %s...\n", args.dataWinPath);
 
         DataWinParserOptions options = {0};
         options.parseGen8 = true;
@@ -962,20 +1043,24 @@ int main(int argc, char* argv[]) {
         options.parseFunc = true;
         options.parseStrg = true;
         options.parseTxtr = true;
-        options.parseAudo = true;
+#if defined(USE_MINIAUDIO) || defined(USE_OPENAL)
+        if (!args.headless)
+            options.parseAudo = true;
+#endif
         options.skipLoadingPreciseMasksForNonPreciseSprites = true;
         options.loadType = args.loadType;
         options.lazyLoadRooms = args.lazyRooms;
+        options.lazyLoadTextures = args.lazyTextures;
         options.eagerlyLoadedRooms = args.eagerRooms;
         DataWin* dataWin = DataWin_parse(currentDataWinPath, options);
 
         Gen8* gen8 = &dataWin->gen8;
-        printf("Loaded \"%s\" (%d) successfully! [WAD Version %u / GameMaker version %u.%u.%u.%u]\n", gen8->name, gen8->gameID, gen8->wadVersion, dataWin->detectedFormat.major, dataWin->detectedFormat.minor, dataWin->detectedFormat.release, dataWin->detectedFormat.build);
+        fprintf(stderr, "Loaded \"%s\" (%d) successfully! [WAD Version %u / GameMaker version %u.%u.%u.%u]\n", gen8->name, gen8->gameID, gen8->wadVersion, dataWin->detectedFormat.major, dataWin->detectedFormat.minor, dataWin->detectedFormat.release, dataWin->detectedFormat.build);
 
 #ifdef HAVE_MALLINFO2
         {
             struct mallinfo2 mi = mallinfo2();
-            printf("Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
+            fprintf(stderr, "Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
         }
 #endif
 
@@ -990,15 +1075,15 @@ int main(int argc, char* argv[]) {
 #ifdef ENABLE_VM_OPCODE_PROFILER
         vm->opcodeProfilerEnabled = args.opcodeProfiler;
         if (vm->opcodeProfilerEnabled) {
-            vm->opcodeVariantCounts = safeCalloc(256 * 256, sizeof(uint64_t));
-            vm->opcodeRValueTypeCounts = safeCalloc(256 * 256, sizeof(uint64_t));
+            vm->opcodeVariantCounts = (uint64_t *)safeCalloc(256 * 256, sizeof(uint64_t));
+            vm->opcodeRValueTypeCounts = (uint64_t *)safeCalloc(256 * 256, sizeof(uint64_t));
         }
 #endif
 
         if (args.hasSeed) {
             srand((unsigned int) args.seed);
             vm->hasFixedSeed = true;
-            printf("Using fixed RNG seed: %d\n", args.seed);
+            fprintf(stderr, "Using fixed RNG seed: %d\n", args.seed);
         }
 
         if (args.printRooms) {
@@ -1006,7 +1091,7 @@ int main(int argc, char* argv[]) {
             // reflects what each room contains without keeping all of them resident simultaneously.
             forEachIndexed(Room, room, idx, dataWin->room.rooms, dataWin->room.count) {
                 if (!room->present) {
-                    printf("[%d] <absent>\n", idx);
+                    printf("[%d] <absent>\n", (int)idx);
                     continue;
                 }
                 bool loadedHere = false;
@@ -1015,17 +1100,17 @@ int main(int argc, char* argv[]) {
                     loadedHere = true;
                 }
 
-                printf("[%d] %s ()\n", idx, room->name);
+                printf("[%d] %s ()\n", (int)idx, room->name);
 
                 forEachIndexed(RoomGameObject, roomGameObject, idx2, room->gameObjects, room->gameObjectCount) {
                     if (roomGameObject->objectDefinition < 0 || (uint32_t) roomGameObject->objectDefinition >= dataWin->objt.count) {
-                        printf("  [%d] <no object> (x=%d,y=%d)\n", idx2, roomGameObject->x, roomGameObject->y);
+                        printf("  [%d] <no object> (x=%d,y=%d)\n", (int)idx2, roomGameObject->x, roomGameObject->y);
                         continue;
                     }
                     GameObject* gameObject = &dataWin->objt.objects[roomGameObject->objectDefinition];
                     printf(
                         "  [%d] %s (x=%d,y=%d,persistent=%d,solid=%d,spriteId=%d,preCreateCode=%d,creationCode=%d)\n",
-                        idx2,
+                        (int)idx2,
                         gameObject->name,
                         roomGameObject->x,
                         roomGameObject->y,
@@ -1052,7 +1137,7 @@ int main(int argc, char* argv[]) {
                 repeat(OBJT_EVENT_TYPE_COUNT, e) {
                     totalEvents += obj->eventLists[e].eventCount;
                 }
-                printf("[%u] %s:\n", idx, obj->name);
+                printf("[%u] %s:\n", (unsigned int)idx, obj->name);
                 if (obj->parentId >= 0 && (uint32_t) obj->parentId < dataWin->objt.count) {
                     printf("  Parent: %s (%d)\n", dataWin->objt.objects[obj->parentId].name, obj->parentId);
                 } else {
@@ -1089,7 +1174,7 @@ int main(int argc, char* argv[]) {
 
         if (args.printShaders) {
             forEachIndexed(Shader, shader, idx, dataWin->shdr.shaders, dataWin->shdr.count) {
-                printf("[%u] %s:\n", idx, shader->name);
+                printf("[%u] %s:\n", (unsigned int)idx, shader->name);
                 printf("GLSL Vertex Shader:\n");
                 char* glslVertex = collapseNewlines(shader->glsl_Vertex);
                 printf("%s\n", glslVertex);
@@ -1186,7 +1271,7 @@ int main(int argc, char* argv[]) {
                 lastSlash = lastBackslash;
             if (lastSlash != nullptr) {
                 size_t len = (size_t) (lastSlash - args.dataWinPath + 1);
-                dataWinDir = safeMalloc(len + 1);
+                dataWinDir = (char *)safeMalloc(len + 1);
                 memcpy(dataWinDir, args.dataWinPath, len);
                 dataWinDir[len] = '\0';
             } else {
@@ -1249,12 +1334,8 @@ int main(int argc, char* argv[]) {
 #else
             if (gfx == LEGACY_GL || gfx == MODERN_GL) {
 #endif
-                // Load OpenGL function pointers via GLAD
-#ifdef ENABLE_GLES
-                if (!gladLoadGLES2Loader((GLADloadproc)platformGetProcAddress)) {
-#else
-                if (!gladLoadGLLoader((GLADloadproc)platformGetProcAddress)) {
-#endif
+                glad_ret = platformInitGlad((GLADloadproc)platformGetProcAddress);
+                if (glad_ret == 0) {
                     fprintf(stderr, "Failed to initialize GLAD\n");
                     platformExit();
                     DataWin_free(dataWin);
@@ -1265,7 +1346,7 @@ int main(int argc, char* argv[]) {
 #endif
 
             // Install the OpenGL debug message callback
-#if !defined(ENABLE_GLES) && (defined(ENABLE_MODERN_GL) || defined(ENABLE_LEGACY_GL))
+#if (defined(ENABLE_MODERN_GL) || defined(ENABLE_LEGACY_GL)) && !defined(NDEBUG)
             if (gfx == MODERN_GL)
                 installGLDebugCallback();
 #endif
@@ -1284,12 +1365,18 @@ int main(int argc, char* argv[]) {
             renderer = SWRenderer_create();
 #endif
 #ifdef ENABLE_LEGACY_GL
-        if (gfx == LEGACY_GL)
+        if (gfx == LEGACY_GL) {
             renderer = GLLegacyRenderer_create();
+            static GLuint hostfb = 0;
+            hostFramebuffer = &hostfb;
+        }
 #endif
 #ifdef ENABLE_MODERN_GL
-        if (gfx == MODERN_GL)
+        if (gfx == MODERN_GL) {
             renderer = GLRenderer_create();
+            ((GLRenderer *)renderer)->isGLES = (glad_ret == 2);
+            hostFramebuffer = &((GLRenderer *)renderer)->hostFramebuffer;
+        }
 #endif
         if (!renderer) {
             fprintf(stderr, "Failed to initialize a renderer\n");
@@ -1476,7 +1563,7 @@ int main(int argc, char* argv[]) {
                     if (args.dumpJsonFilePattern != nullptr) {
                         char filename[512];
                         snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
-                        FILE* f = fopen(filename, "w");
+                        FILE* f = fopen(filename, "wb");
                         if (f != nullptr) {
                             fwrite(json, 1, strlen(json), f);
                             fputc('\n', f);
@@ -1534,9 +1621,9 @@ int main(int argc, char* argv[]) {
                     printf("Changed global.interact [%d] value!\n", interactVarId);
                 }
 
-                bool* currentKeyDown = safeCalloc(GML_KEY_COUNT, sizeof(bool));
-                bool* currentKeyPressed = safeCalloc(GML_KEY_COUNT, sizeof(bool));
-                bool* currentKeyReleased = safeCalloc(GML_KEY_COUNT, sizeof(bool));
+                bool currentKeyDown[GML_KEY_COUNT];
+                bool currentKeyPressed[GML_KEY_COUNT];
+                bool currentKeyReleased[GML_KEY_COUNT];
 
                 if (freeCamActive) {
                     // THIS IS A HACK!! We don't want to pass keys to the runner, but we DO want to keep it so we can hold the arrow keys to move the camera
@@ -1557,10 +1644,6 @@ int main(int argc, char* argv[]) {
                     memcpy(runner->keyboard->keyPressed, currentKeyPressed, sizeof(runner->keyboard->keyPressed));
                     memcpy(runner->keyboard->keyReleased, currentKeyReleased, sizeof(runner->keyboard->keyReleased));
                 }
-
-                free(currentKeyDown);
-                free(currentKeyPressed);
-                free(currentKeyReleased);
 
                 if (args.profilerFramesBetween > 0 && runner->frameCount > 0 && runner->frameCount % args.profilerFramesBetween == 0) {
                     char* profilerReport = Profiler_createReport(vm->profiler, 20, args.profilerFramesBetween);
@@ -1588,7 +1671,7 @@ int main(int argc, char* argv[]) {
                     if (args.dumpJsonFilePattern != nullptr) {
                         char filename[512];
                         snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
-                        FILE* f = fopen(filename, "w");
+                        FILE* f = fopen(filename, "wb");
                         if (f != nullptr) {
                             fwrite(json, 1, strlen(json), f);
                             fputc('\n', f);
@@ -1610,7 +1693,7 @@ int main(int argc, char* argv[]) {
 #endif
 #if defined(ENABLE_LEGACY_GL) || defined(ENABLE_MODERN_GL)
                 if (gfx == LEGACY_GL || gfx == MODERN_GL) {
-                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                    glBindFramebuffer(GL_FRAMEBUFFER, *hostFramebuffer);
                     glClear(GL_COLOR_BUFFER_BIT);
                 }
 #endif
@@ -1682,7 +1765,7 @@ int main(int argc, char* argv[]) {
 
                 if (shouldScreenshot || RunnerKeyboard_checkPressed(runner->keyboard, VK_F5)) {
                     captureScreenshot(0, args.screenshotPattern, runner->frameCount, fbWidth, fbHeight, true);
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                    glBindFramebuffer(GL_FRAMEBUFFER, *hostFramebuffer);
                 }
 
                 // Dump all surfaces if this frame matches a requested frame
@@ -1691,7 +1774,7 @@ int main(int argc, char* argv[]) {
                 if (shouldDumpSurfaces || RunnerKeyboard_checkPressed(runner->keyboard, VK_F6)) {
                     GLRenderer* gl = (GLRenderer*) renderer;
                     dumpAllSurfaces(gl, args.screenshotSurfacesPattern, runner->frameCount);
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                    glBindFramebuffer(GL_FRAMEBUFFER, *hostFramebuffer);
                 }
 #endif
 
@@ -1711,11 +1794,19 @@ int main(int argc, char* argv[]) {
                 Runner_handlePendingRoomChange(runner);
             }
 
+            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_BACKSPACE)) {
+                size_t bytes_used = get_used_memory();
+                if (bytes_used == 0)
+                    fprintf(stderr, "Unable to get memory usage\n");
+                else
+                    fprintf(stderr, "Memory use right now: %zu bytes (%.1f MB)\n", bytes_used, bytes_used / 1024.0f / 1024.0f);
+            }
+
             // Limit frame rate to room speed (skip in headless mode for max speed!!)
             if (!args.headless && runner->currentRoom->speed > 0) {
                 static bool fastForwardActive = false;
                 static bool fastForwardTabPrev = false;
-                bool fastForwardTabNow = RunnerKeyboard_checkPressed(runner->keyboard, '\t');
+                bool fastForwardTabNow = RunnerKeyboard_checkPressed(runner->keyboard, VK_TAB);
                 if (args.fastForwardSpeed > 0.0 && fastForwardTabNow && !fastForwardTabPrev) {
                     fastForwardActive = !fastForwardActive;
                     lastFrameTime = nowNanos();
@@ -1763,7 +1854,10 @@ int main(int argc, char* argv[]) {
                 free(currentGameArgs[i]);
             }
             arrfree(currentGameArgs);
-            printf("Bye! :3\n");
+            fprintf(stderr, "Bye! :3\n");
+#ifdef _WIN32
+            timeEndPeriod(1);
+#endif
             return 0;
         }
 
@@ -1823,7 +1917,7 @@ int main(int argc, char* argv[]) {
             // The pendingWorkingDirectory contains a slash at the beginning of it (example: /chapter3)
             // The parentDir does NOT have a trailing slash, so we don't need to bother with it
             size_t newPathLen = strlen(parentDir) + strlen(nextWorkingDirectory) + 1 + strlen(dataWinFilename) + 1;
-            char* newPath = safeMalloc(newPathLen);
+            char* newPath = (char *)safeMalloc(newPathLen);
             snprintf(newPath, newPathLen, "%s%s/%s", parentDir, nextWorkingDirectory, dataWinFilename);
 
             free(parentDir);
@@ -1847,10 +1941,5 @@ int main(int argc, char* argv[]) {
             free(nextLaunchParameters);
             arrfree(newArguments);
         }
-
-#ifdef _WIN32
-        timeEndPeriod(1);
-#endif
-        printf("Bye! :3\n");
     }
 }

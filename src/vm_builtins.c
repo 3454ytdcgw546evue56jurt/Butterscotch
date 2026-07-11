@@ -1,5 +1,6 @@
 #include "vm_builtins.h"
 #include "binary_utils.h"
+#include "gml_array.h"
 #include "instance.h"
 #include "json_reader.h"
 #include "json_writer.h"
@@ -15,7 +16,6 @@
 #include "math_compat.h"
 #include <ctype.h>
 #include <time.h>
-#include <sys/time.h>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -32,7 +32,9 @@
 #include "base64.h"
 #include "gettime.h"
 
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
 
 #define MAX_BACKGROUNDS 8
 
@@ -339,6 +341,7 @@ static const BuiltinVarEntry BUILTIN_VAR_TABLE[] = {
     { "image_speed", BUILTIN_VAR_IMAGE_SPEED },
     { "image_xscale", BUILTIN_VAR_IMAGE_XSCALE },
     { "image_yscale", BUILTIN_VAR_IMAGE_YSCALE },
+    { "infinity", BUILTIN_VAR_INFINITY },
     { "instance_count", BUILTIN_VAR_INSTANCE_COUNT },
     { "instance_id", BUILTIN_VAR_INSTANCE_ID },
     { "keyboard_key", BUILTIN_VAR_KEYBOARD_KEY },
@@ -1049,7 +1052,22 @@ RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVar
             }
             return RValue_makeUndefined();
         }
-        case BUILTIN_VAR_ARGUMENT0 ... BUILTIN_VAR_ARGUMENT15: {
+        case BUILTIN_VAR_ARGUMENT0:
+        case BUILTIN_VAR_ARGUMENT1:
+        case BUILTIN_VAR_ARGUMENT2:
+        case BUILTIN_VAR_ARGUMENT3:
+        case BUILTIN_VAR_ARGUMENT4:
+        case BUILTIN_VAR_ARGUMENT5:
+        case BUILTIN_VAR_ARGUMENT6:
+        case BUILTIN_VAR_ARGUMENT7:
+        case BUILTIN_VAR_ARGUMENT8:
+        case BUILTIN_VAR_ARGUMENT9:
+        case BUILTIN_VAR_ARGUMENT10:
+        case BUILTIN_VAR_ARGUMENT11:
+        case BUILTIN_VAR_ARGUMENT12:
+        case BUILTIN_VAR_ARGUMENT13:
+        case BUILTIN_VAR_ARGUMENT14:
+        case BUILTIN_VAR_ARGUMENT15: {
             int argNumber = builtinVarId - BUILTIN_VAR_ARGUMENT0;
             if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > argNumber) {
                 RValue val = ctx->scriptArgs[argNumber];
@@ -1098,6 +1116,8 @@ RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVar
             return RValue_makeBool(false);
         case BUILTIN_VAR_PI:
             return RValue_makeReal(3.14159265358979323846);
+        case BUILTIN_VAR_INFINITY:
+            return RValue_makeReal(INFINITY);
         case BUILTIN_VAR_UNDEFINED:
             return RValue_makeUndefined();
 
@@ -1244,7 +1264,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVar
 }
 
 void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId, const char* name, RValue val, int32_t arrayIndex) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: setVariable called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: setVariable called but no runner!");
     requireNotNull(runner);
 
     // Structs: instance builtins are ordinary members.
@@ -1674,28 +1694,6 @@ void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId
             runner->currentRoom->speed = (uint32_t) RValue_toInt32(val);
             return;
 
-        // Read-only variables (silently ignore with warning)
-        case BUILTIN_VAR_OS_TYPE ... BUILTIN_VAR_OS_LLVM_WINPHONE:
-        case BUILTIN_VAR_BUFFER_FIXED ... BUILTIN_VAR_BUFFER_SEEK_END:
-        case BUILTIN_VAR_ID:
-        case BUILTIN_VAR_OBJECT_INDEX:
-        case BUILTIN_VAR_CURRENT_DAY:
-        case BUILTIN_VAR_CURRENT_HOUR:
-        case BUILTIN_VAR_CURRENT_MINUTE:
-        case BUILTIN_VAR_CURRENT_MONTH:
-        case BUILTIN_VAR_CURRENT_SECOND:
-        case BUILTIN_VAR_CURRENT_TIME:
-        case BUILTIN_VAR_CURRENT_WEEKDAY:
-        case BUILTIN_VAR_CURRENT_YEAR:
-        case BUILTIN_VAR_VIEW_CURRENT:
-        case BUILTIN_VAR_PATH_INDEX:
-        case BUILTIN_VAR_DEBUG_MODE:
-        case BUILTIN_VAR_ROOM_FIRST:
-        case BUILTIN_VAR_ROOM_LAST:
-        case BUILTIN_VAR_GP_FACE1 ... BUILTIN_VAR_GP_AXIS_RV:
-            fprintf(stderr, "VM: [%s] Attempted write to read-only built-in '%s'\n", ctx->currentCodeName, name);
-            return;
-
         // argument[N] - array-style write to script arguments
         case BUILTIN_VAR_ARGUMENT:
             if (arrayIndex >= 0) {
@@ -1704,7 +1702,22 @@ void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId
             return;
 
         // Argument variables (argument0..argument15)
-        case BUILTIN_VAR_ARGUMENT0 ... BUILTIN_VAR_ARGUMENT15: {
+        case BUILTIN_VAR_ARGUMENT0:
+        case BUILTIN_VAR_ARGUMENT1:
+        case BUILTIN_VAR_ARGUMENT2:
+        case BUILTIN_VAR_ARGUMENT3:
+        case BUILTIN_VAR_ARGUMENT4:
+        case BUILTIN_VAR_ARGUMENT5:
+        case BUILTIN_VAR_ARGUMENT6:
+        case BUILTIN_VAR_ARGUMENT7:
+        case BUILTIN_VAR_ARGUMENT8:
+        case BUILTIN_VAR_ARGUMENT9:
+        case BUILTIN_VAR_ARGUMENT10:
+        case BUILTIN_VAR_ARGUMENT11:
+        case BUILTIN_VAR_ARGUMENT12:
+        case BUILTIN_VAR_ARGUMENT13:
+        case BUILTIN_VAR_ARGUMENT14:
+        case BUILTIN_VAR_ARGUMENT15: {
             int argNumber = builtinVarId - BUILTIN_VAR_ARGUMENT0;
             VM_writeToScriptArgs(ctx, argNumber, val);
             return;
@@ -1720,8 +1733,30 @@ void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId
             Runner_setHealth(runner, RValue_toReal(val));
             return;
 
+        // Read-only variables (silently ignore with warning)
         default:
-            break;
+            if (!((builtinVarId >= BUILTIN_VAR_OS_TYPE && builtinVarId <= BUILTIN_VAR_OS_LLVM_WINPHONE) || \
+               (builtinVarId >= BUILTIN_VAR_BUFFER_FIXED && builtinVarId <= BUILTIN_VAR_BUFFER_SEEK_END) || \
+               (builtinVarId >= BUILTIN_VAR_GP_FACE1 && builtinVarId <= BUILTIN_VAR_GP_AXIS_RV)))
+                break;
+            // fall through
+        case BUILTIN_VAR_ID:
+        case BUILTIN_VAR_OBJECT_INDEX:
+        case BUILTIN_VAR_CURRENT_DAY:
+        case BUILTIN_VAR_CURRENT_HOUR:
+        case BUILTIN_VAR_CURRENT_MINUTE:
+        case BUILTIN_VAR_CURRENT_MONTH:
+        case BUILTIN_VAR_CURRENT_SECOND:
+        case BUILTIN_VAR_CURRENT_TIME:
+        case BUILTIN_VAR_CURRENT_WEEKDAY:
+        case BUILTIN_VAR_CURRENT_YEAR:
+        case BUILTIN_VAR_VIEW_CURRENT:
+        case BUILTIN_VAR_PATH_INDEX:
+        case BUILTIN_VAR_DEBUG_MODE:
+        case BUILTIN_VAR_ROOM_FIRST:
+        case BUILTIN_VAR_ROOM_LAST:
+            fprintf(stderr, "VM: [%s] Attempted write to read-only built-in '%s'\n", ctx->currentCodeName, name);
+            return;
     }
 
     fprintf(stderr, "VM: [%s] Unhandled built-in variable write '%s' (arrayIndex=%d)\n", ctx->currentCodeName, name, arrayIndex);
@@ -1762,7 +1797,7 @@ static RValue builtin_string_length(MAYBE_UNUSED VMContext* ctx, RValue* args, i
 
 // https://docs.vultr.com/clang/examples/remove-all-characters-in-a-string-except-alphabets
 void filterAlphabets(char *str) {
-    char result[strlen(str) + 1];
+    char *result = (char *)safeMalloc(strlen(str) + 1);
     int j = 0;
     for (int i = 0; str[i] != '\0'; i++) {
         if ((str[i] >= 'a' && str[i] <= 'z') || (str[i] >= 'A' && str[i] <= 'Z')) {
@@ -1771,6 +1806,7 @@ void filterAlphabets(char *str) {
     }
     result[j] = '\0';  // Null-terminate the result string
     strcpy(str, result);  // Optionally copy back to original string
+    free(result);
 }
 
 static RValue builtin_string_letters(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
@@ -1916,6 +1952,15 @@ static int compareReals(const void* a, const void* b) {
     if (lhs > rhs) return 1;
     if (rhs > lhs) return -1;
     return 0;
+}
+
+static RValue builtin_mean(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeReal(0.0);
+    GMLReal result = 0.0;
+    repeat(argCount, i) {
+        result += RValue_toReal(args[i]);
+    }
+    return RValue_makeReal(result / argCount);
 }
 
 static RValue builtin_median(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
@@ -2102,7 +2147,7 @@ static RValue builtin_string_copy(MAYBE_UNUSED VMContext* ctx, RValue* args, int
     if (byteEnd > strLen) byteEnd = strLen;
 
     int32_t nbytes = byteEnd - byteStart;
-    char* result = safeMalloc(nbytes + 1);
+    char* result = (char *)safeMalloc(nbytes + 1);
     memcpy(result, str + byteStart, (size_t) nbytes);
     result[nbytes] = '\0';
 
@@ -2131,7 +2176,7 @@ static RValue builtin_string_format(MAYBE_UNUSED VMContext* ctx, RValue* args, i
     int32_t numLen = (int32_t) strlen(numBuf);
     int32_t totalLen = leftPad + numLen;
 
-    char* result = safeMalloc(totalLen + 1);
+    char* result = (char *)safeMalloc(totalLen + 1);
     for (int32_t i = 0; leftPad > i; i++) result[i] = ' ';
     memcpy(result + leftPad, numBuf, (size_t) numLen);
     result[totalLen] = '\0';
@@ -2149,7 +2194,7 @@ static RValue builtin_string_repeat(MAYBE_UNUSED VMContext* ctx, RValue* args, i
 
     size_t strLen = strlen(str);
     size_t totalLen = strLen * (size_t) count;
-    char* result = safeMalloc(totalLen + 1);
+    char* result = (char *)safeMalloc(totalLen + 1);
     repeat(count, i) {
         memcpy(result + i * strLen, str, strLen);
     }
@@ -2180,6 +2225,19 @@ static RValue builtin_string_count(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     free(substr);
     free(str);
     return RValue_makeInt32(count);
+}
+
+// Source - https://stackoverflow.com/a/15515276
+static RValue builtin_string_starts_with(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount) return RValue_makeInt32(0);
+    char* substr = RValue_toString(args[0]);
+    char* str = RValue_toString(args[1]);
+
+    bool ret = (strncmp(str, substr, strlen(substr)) == 0);
+
+    free(substr);
+    free(str);
+    return RValue_makeBool(ret);
 }
 
 static RValue builtin_ord(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
@@ -2221,7 +2279,7 @@ static RValue builtin_string_pos(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
 
 // Appends a copy of [start, start + len) to the array as an owned string, growing it by one slot.
 static void appendSplitSegment(GMLArray* arr, int32_t* count, const char* start, int32_t len) {
-    char* segment = safeMalloc((size_t) len + 1);
+    char* segment = (char *)safeMalloc((size_t) len + 1);
     if (len > 0) memcpy(segment, start, (size_t) len);
     segment[len] = '\0';
     GMLArray_growTo(arr, *count + 1);
@@ -2300,7 +2358,7 @@ static RValue builtin_string_char_at(MAYBE_UNUSED VMContext* ctx, RValue* args, 
     int32_t byteNext = byteStart;
     TextUtils_decodeUtf8(str, strLen, &byteNext);
     int32_t nbytes = byteNext - byteStart;
-    char* out = safeMalloc(nbytes + 1);
+    char* out = (char *)safeMalloc(nbytes + 1);
     memcpy(out, str + byteStart, (size_t) nbytes);
     out[nbytes] = '\0';
     free(str);
@@ -2344,7 +2402,7 @@ static RValue builtin_string_delete(MAYBE_UNUSED VMContext* ctx, RValue* args, i
     if (byteEnd > strLen) byteEnd = strLen;
 
     int32_t removeLen = byteEnd - byteStart;
-    char* result = safeMalloc(strLen - removeLen + 1);
+    char* result = (char *)safeMalloc(strLen - removeLen + 1);
     memcpy(result, str, (size_t) byteStart);
     memcpy(result + byteStart, str + byteEnd, (size_t) (strLen - byteEnd));
     result[strLen - removeLen] = '\0';
@@ -2366,7 +2424,7 @@ static RValue builtin_string_insert(MAYBE_UNUSED VMContext* ctx, RValue* args, i
     int32_t bytePos = TextUtils_utf8AdvanceCodepoints(str, strLen, pos);
     if (bytePos > strLen) bytePos = strLen;
 
-    char* result = safeMalloc(strLen + subLen + 1);
+    char* result = (char *)safeMalloc(strLen + subLen + 1);
     memcpy(result, str, (size_t) bytePos);
     memcpy(result + bytePos, substr, (size_t) subLen);
     memcpy(result + bytePos + subLen, str + bytePos, (size_t) (strLen - bytePos));
@@ -2402,7 +2460,7 @@ static RValue builtin_string_replace(MAYBE_UNUSED VMContext* ctx, RValue* args, 
 
     int32_t newLen = strLen - needleLen + replacementLen;
     int32_t before = (int32_t) (appearance - str);
-    char *outputString = safeMalloc(newLen + 1);
+    char *outputString = (char *)safeMalloc(newLen + 1);
 
     memcpy(outputString, str, before);
     memcpy(outputString + before, replacement, replacementLen);
@@ -2435,7 +2493,7 @@ static RValue builtin_string_replace_all(MAYBE_UNUSED VMContext* ctx, RValue* ar
 
     int32_t strLen = (int32_t) strlen(str);
     int32_t resultLen = strLen + count * (replacementLen - needleLen);
-    char* result = safeMalloc(resultLen + 1);
+    char* result = (char *)safeMalloc(resultLen + 1);
     char* out = result;
     p = str;
     const char* match;
@@ -2545,6 +2603,15 @@ static RValue builtin_lerp(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t ar
 static RValue builtin_tan(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(0.0);
     return RValue_makeReal(GMLReal_tan(RValue_toReal(args[0])));
+}
+
+static RValue builtin_dot_product(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (4 > argCount) return RValue_makeReal(0.0);
+    GMLReal x1 = RValue_toReal(args[0]);
+    GMLReal y1 = RValue_toReal(args[1]);
+    GMLReal x2 = RValue_toReal(args[2]);
+    GMLReal y2 = RValue_toReal(args[3]);
+    return RValue_makeReal(x1 * x2 + y1 * y2);
 }
 
 static RValue builtin_point_distance(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
@@ -2766,7 +2833,7 @@ static bool rvalueIsMatrix(RValue rv) {
     if (rv.type != RVALUE_ARRAY) return false;
     if (GMLArray_length1D(rv.array) != 16) return false;
     repeat (16, i) {
-        RValueType type = GMLArray_slot(rv.array, i)->type;
+        RValueType type = (RValueType)(GMLArray_slot(rv.array, i)->type);
         if (type != RVALUE_REAL && type != RVALUE_INT32 && type != RVALUE_INT64)
             return false;
     }
@@ -3229,7 +3296,7 @@ static RValue builtin_room_get_info(VMContext* ctx, RValue* args, int32_t argCou
 }
 
 static RValue builtin_room_goto_next(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: room_goto_next called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: room_goto_next called but no runner!");
 
     int32_t nextPos = runner->currentRoomOrderPosition + 1;
     if ((int32_t) runner->dataWin->gen8.roomOrderCount > nextPos) {
@@ -3241,7 +3308,7 @@ static RValue builtin_room_goto_next(VMContext* ctx, MAYBE_UNUSED RValue* args, 
 }
 
 static RValue builtin_room_goto_previous(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: room_goto_previous called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: room_goto_previous called but no runner!");
 
     int32_t previousPos = runner->currentRoomOrderPosition - 1;
     if (previousPos >= 0) {
@@ -3254,19 +3321,19 @@ static RValue builtin_room_goto_previous(VMContext* ctx, MAYBE_UNUSED RValue* ar
 
 static RValue builtin_room_goto(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: room_goto called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: room_goto called but no runner!");
     runner->pendingRoom = RValue_toInt32(args[0]);
     return RValue_makeUndefined();
 }
 
 static RValue builtin_room_restart(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: room_restart called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: room_restart called but no runner!");
     runner->pendingRoom = runner->currentRoomIndex;
     return RValue_makeUndefined();
 }
 
 static RValue builtin_room_next(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: room_next called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: room_next called but no runner!");
     int32_t roomId = RValue_toInt32(args[0]);
     DataWin* dw = runner->dataWin;
     repeat(dw->gen8.roomOrderCount, i) {
@@ -3278,7 +3345,7 @@ static RValue builtin_room_next(VMContext* ctx, RValue* args, MAYBE_UNUSED int32
 }
 
 static RValue builtin_room_previous(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: room_previous called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: room_previous called but no runner!");
     int32_t roomId = RValue_toInt32(args[0]);
     DataWin* dw = runner->dataWin;
     repeat(dw->gen8.roomOrderCount, i) {
@@ -3923,7 +3990,7 @@ static RValue builtin_struct_get_names(VMContext* ctx, RValue* args, int32_t arg
                 char* name = VM_getVariableNameByVarId(ctx, entryOnTheVarStruct.key);
 
                 // We don't need to worry about making it owned because the name is owned by the Runner itself
-                GMLArray_add(array, RValue_makeString(requireNotNullMessage(name, "Trying to set a variable that we do not know the name of! Bug?")));
+                GMLArray_add(array, RValue_makeString((const char *)requireNotNullMessage(name, "Trying to set a variable that we do not know the name of! Bug?")));
             }
         }
     }
@@ -4053,7 +4120,7 @@ static RValue builtin_method(VMContext* ctx, MAYBE_UNUSED RValue* args, int32_t 
         }
 
         if (instanceToBeBound == INSTANCE_SELF) {
-            instanceToBeBound = requireNotNullMessage(ctx->currentInstance, "Trying to bind method to INSTANCE_SELF while there isn't a instance in the current context!")->instanceId;
+            instanceToBeBound = ((Instance *)requireNotNullMessage(ctx->currentInstance, "Trying to bind method to INSTANCE_SELF while there isn't a instance in the current context!"))->instanceId;
         }
 
         return RValue_makeMethodFromCodeIndexAndInstanceId(codeIndex, instanceToBeBound);
@@ -4145,7 +4212,7 @@ static RValue builtin_os_get_region(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RV
     return RValue_makeOwnedString(safeStrdup("US"));
 }
 
-STUB_RETURN_FALSE(os_is_paused);
+STUB_RETURN_FALSE(os_is_paused)
 
 // ===[ XBOX ONE FUNCTIONS ]===
 
@@ -4158,13 +4225,13 @@ static RValue builtin_xboxone_show_account_picker(MAYBE_UNUSED VMContext* ctx, R
     return RValue_makeReal((GMLReal) asyncId);
 }
 
-STUB_RETURN_TRUE(xboxone_user_is_signed_in);
-STUB_RETURN_FALSE(xboxone_is_suspending);
-STUB_RETURN_FALSE(xboxone_is_constrained);
-STUB_RETURN_ZERO(xboxone_suspend);
-STUB_RETURN_ZERO(xboxone_set_savedata_user);
-STUB_RETURN_ZERO(xboxone_stats_add_user);
-STUB_RETURN_ZERO(xboxone_achievements_set_progress);
+STUB_RETURN_TRUE(xboxone_user_is_signed_in)
+STUB_RETURN_FALSE(xboxone_is_suspending)
+STUB_RETURN_FALSE(xboxone_is_constrained)
+STUB_RETURN_ZERO(xboxone_suspend)
+STUB_RETURN_ZERO(xboxone_set_savedata_user)
+STUB_RETURN_ZERO(xboxone_stats_add_user)
+STUB_RETURN_ZERO(xboxone_achievements_set_progress)
 
 static RValue builtin_environment_get_variable(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     char* name = RValue_toString(args[0]);
@@ -4229,7 +4296,14 @@ static RValue builtin_ds_map_create(VMContext* ctx, MAYBE_UNUSED RValue* args, M
     return RValue_makeReal((GMLReal) dsMapCreate(runner));
 }
 
-static RValue builtin_ds_map_add(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue makeMapListContainer(VMContext* ctx, int32_t id, int32_t type) {
+    Instance* container = Runner_createStruct(ctx->runner);
+    VM_structSetAndFreeVal(ctx, container, "ObjType", RValue_makeInt32(type), -1);
+    VM_structSetAndFreeVal(ctx, container, "Object", RValue_makeInt32(id), -1);
+    return RValue_makeStructAndIncRef(container);
+}
+
+static RValue dsMapAddCommon(VMContext* ctx, RValue* args, int32_t argCount, bool wrapAsContainer, int32_t containerType) {
     if (3 > argCount) return RValue_makeUndefined();
     Runner* runner = ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -4238,16 +4312,80 @@ static RValue builtin_ds_map_add(VMContext* ctx, RValue* args, int32_t argCount)
 
     char* key = RValue_toString(args[1]);
 
-    // Only add if key doesn't exist
-    bool exists = shgeti(*mapPtr, key) != -1;
-
-    if (exists) {
-        free(key); // Key already exists, we didn't insert it
+    RValue valueToStore;
+    if (wrapAsContainer) {
+        // Wrap the value (ds_map or ds_list ID) in a container struct
+        int32_t containedId = RValue_toInt32(args[2]);
+        valueToStore = makeMapListContainer(ctx, containedId, containerType);
     } else {
-        shput(*mapPtr, key, RValue_makeIndependent(args[2]));
+        // Store the value directly
+        valueToStore = RValue_makeIndependent(args[2]);
+    }
+
+    // Check if key exists
+    ptrdiff_t existingIdx = shgeti(*mapPtr, key);
+    if (existingIdx != -1) {
+        // Key already exists - replace the value
+        RValue_free(&(*mapPtr)[existingIdx].value);
+        (*mapPtr)[existingIdx].value = valueToStore;
+        free(key); // The key is already stored in the map
+    } else {
+        shput(*mapPtr, key, valueToStore);
     }
 
     return RValue_makeUndefined();
+}
+
+static RValue builtin_ds_map_add(VMContext* ctx, RValue* args, int32_t argCount) {
+    return dsMapAddCommon(ctx, args, argCount, false, 0);
+}
+
+static RValue builtin_ds_map_add_map(VMContext* ctx, RValue* args, int32_t argCount) {
+    return dsMapAddCommon(ctx, args, argCount, true, DS_TYPE_MAP);
+}
+
+static RValue builtin_ds_map_add_list(VMContext* ctx, RValue* args, int32_t argCount) {
+    return dsMapAddCommon(ctx, args, argCount, true, DS_TYPE_LIST);
+}
+
+static RValue builtin_ds_map_is_map(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount) return RValue_makeBool(false);
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
+    if (mapPtr == nullptr) return RValue_makeBool(false);
+
+    ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
+    if (0 > idx) return RValue_makeBool(false);
+
+    RValue val = (*mapPtr)[idx].value;
+    if (val.type == RVALUE_STRUCT && val.structInst != nullptr) {
+        RValue objType = VM_structGetVariableByVarName(ctx, val.structInst, "ObjType", -1);
+        if (objType.type != RVALUE_UNDEFINED) {
+            return RValue_makeBool(RValue_toInt32(objType) == DS_TYPE_MAP);
+        }
+    }
+    return RValue_makeBool(false);
+}
+
+static RValue builtin_ds_map_is_list(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount) return RValue_makeBool(false);
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
+    if (mapPtr == nullptr) return RValue_makeBool(false);
+
+    ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
+    if (0 > idx) return RValue_makeBool(false);
+
+    RValue val = (*mapPtr)[idx].value;
+    if (val.type == RVALUE_STRUCT && val.structInst != nullptr) {
+        RValue objType = VM_structGetVariableByVarName(ctx, val.structInst, "ObjType", -1);
+        if (objType.type != RVALUE_UNDEFINED) {
+            return RValue_makeBool(RValue_toInt32(objType) == DS_TYPE_LIST);
+        }
+    }
+    return RValue_makeBool(false);
 }
 
 static RValue builtin_ds_map_clear(VMContext* ctx, RValue* args, int32_t argCount) {
@@ -4341,6 +4479,17 @@ static RValue builtin_ds_map_find_value(VMContext* ctx, RValue* args, int32_t ar
 
     if (0 > idx) return RValue_makeUndefined();
     RValue val = (*mapPtr)[idx].value;
+
+    if (val.type == RVALUE_STRUCT && val.structInst != nullptr) {
+        RValue objectVal = VM_structGetVariableByVarName(ctx, val.structInst, "Object", -1);
+        if (objectVal.type != RVALUE_UNDEFINED) {
+            RValue result = RValue_makeIndependent(objectVal);
+            RValue_free(&objectVal);
+            return result;
+        }
+        RValue_free(&objectVal);
+    }
+
     if (val.type == RVALUE_STRING && val.string != nullptr) {
         return RValue_makeOwnedString(safeStrdup(val.string));
     }
@@ -4659,7 +4808,7 @@ static RValue dsStreamReadValue(int32_t wadVersion, DsReadStream* s, int32_t ver
         case DS_STREAM_VALUE_STRING: {
             int32_t len = dsStreamReadS32(s);
             if (s->error || 0 > len || s->pos + len > s->size) { s->error = true; return RValue_makeUndefined(); }
-            char* str = safeMalloc((size_t) len + 1);
+            char* str = (char *)safeMalloc((size_t) len + 1);
             if (len > 0) memcpy(str, s->data + s->pos, (size_t) len);
             str[len] = '\0';
             s->pos += len;
@@ -4723,7 +4872,7 @@ static RValue builtin_ds_list_read(VMContext* ctx, RValue* args, MAYBE_UNUSED in
     if (2 > hexLen || (hexLen & 1) != 0) return RValue_makeBool(false);
 
     int32_t byteLen = hexLen / 2;
-    uint8_t* bytes = safeMalloc((size_t) byteLen);
+    uint8_t* bytes = (uint8_t *)safeMalloc((size_t) byteLen);
     repeat(byteLen, i) {
         int hi = dsHexNibble(hex[i * 2]);
         int lo = dsHexNibble(hex[i * 2 + 1]);
@@ -4849,7 +4998,7 @@ static void dsStreamAppendValues(uint8_t** buf, const RValue* items, int32_t len
 // Consumes "buf" (stb_ds array): hex-encodes it, frees it, and returns the hex as an owned-string RValue.
 static RValue dsStreamFinishToHexString(uint8_t* buf) {
     int32_t byteLen = (int32_t) arrlen(buf);
-    char* hex = safeMalloc((size_t) byteLen * 2 + 1);
+    char* hex = (char *)safeMalloc((size_t) byteLen * 2 + 1);
     static const char HEX_CHARS[] = "0123456789ABCDEF";
     repeat(byteLen, i) {
         hex[i * 2] = HEX_CHARS[(buf[i] >> 4) & 0xF];
@@ -4912,7 +5061,7 @@ static RValue builtin_ds_grid_create(VMContext* ctx, MAYBE_UNUSED RValue* args, 
             runner->dsGridPool[i].freed = false;
             runner->dsGridPool[i].width = width;
             runner->dsGridPool[i].height = height;
-            runner->dsGridPool[i].items = count > 0 ? safeCalloc(count, sizeof(RValue)) : nullptr;
+            runner->dsGridPool[i].items = count > 0 ? (RValue *)safeCalloc(count, sizeof(RValue)) : nullptr;
             return RValue_makeReal(i);
         }
     }
@@ -4920,7 +5069,7 @@ static RValue builtin_ds_grid_create(VMContext* ctx, MAYBE_UNUSED RValue* args, 
     DsGrid newGrid = {0};
     newGrid.width = width;
     newGrid.height = height;
-    newGrid.items = count > 0 ? safeCalloc(count, sizeof(RValue)) : nullptr;
+    newGrid.items = count > 0 ? (RValue *)safeCalloc(count, sizeof(RValue)) : nullptr;
     int32_t id = poolSize;
     arrput(runner->dsGridPool, newGrid);
     return RValue_makeReal(id);
@@ -5005,11 +5154,11 @@ static RValue builtin_ds_grid_add(VMContext* ctx, MAYBE_UNUSED RValue* args, MAY
     RValue* slot = &grid->items[x + (y * grid->width)];
     if (slot->type == RVALUE_STRING && args[3].type == RVALUE_STRING) {
         // If they are both strings, then we concatenate them
-        const char* sa = requireNotNull(slot->string);
-        const char* sb = requireNotNull(args[3].string);
+        const char* sa = (const char *)requireNotNull(slot->string);
+        const char* sb = (const char *)requireNotNull(args[3].string);
         size_t lenA = strlen(sa);
         size_t lenB = strlen(sb);
-        char* result = safeMalloc(lenA + lenB + 1);
+        char* result = (char *)safeMalloc(lenA + lenB + 1);
         memcpy(result, sa, lenA);
         memcpy(result + lenA, sb, lenB + 1);
         RValue_free(slot);
@@ -5034,7 +5183,7 @@ static RValue builtin_ds_grid_resize(VMContext* ctx, MAYBE_UNUSED RValue* args, 
     if (0 > height) height = 0;
 
     size_t count = (size_t) width * (size_t) height;
-    RValue* newGrid = count > 0 ? safeCalloc(count, sizeof(RValue)) : nullptr;
+    RValue* newGrid = count > 0 ? (RValue *)safeCalloc(count, sizeof(RValue)) : nullptr;
 
     int32_t copyWidth = width > grid->width ? grid->width : width;
     int32_t copyHeight = height > grid->height ? grid->height : height;
@@ -5182,7 +5331,7 @@ static RValue builtin_ds_stack_read(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     if (2 > hexLen || (hexLen & 1) != 0) return RValue_makeBool(false);
 
     int32_t byteLen = hexLen / 2;
-    uint8_t* bytes = safeMalloc((size_t) byteLen);
+    uint8_t* bytes = (uint8_t *)safeMalloc((size_t) byteLen);
     repeat(byteLen, i) {
         int hi = dsHexNibble(hex[i * 2]);
         int lo = dsHexNibble(hex[i * 2 + 1]);
@@ -5360,7 +5509,7 @@ static RValue builtin_ds_queue_read(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     if (2 > hexLen || (hexLen & 1) != 0) return RValue_makeBool(false);
 
     int32_t byteLen = hexLen / 2;
-    uint8_t* bytes = safeMalloc((size_t) byteLen);
+    uint8_t* bytes = (uint8_t *)safeMalloc((size_t) byteLen);
     repeat(byteLen, i) {
         int hi = dsHexNibble(hex[i * 2]);
         int lo = dsHexNibble(hex[i * 2 + 1]);
@@ -6334,6 +6483,25 @@ static RValue builtin_sound_play(VMContext* ctx, RValue* args, MAYBE_UNUSED int3
     return RValue_makeReal((GMLReal) instanceId);
 }
 
+static RValue builtin_audio_get_name(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    AudioSystem* audio = getAudioSystem(ctx);
+    if (audio == nullptr || audio->vtable == nullptr || 1 > argCount) return RValue_makeString("<undefined>");
+    if (args[0].type == RVALUE_UNDEFINED) return RValue_makeString("<undefined>");
+
+    int32_t soundIndex = RValue_toInt32(args[0]);
+    if (0 > soundIndex) return RValue_makeString("<undefined>");
+
+    repeat(arrlen(audio->audioGroups), i) {
+        DataWin* dw = audio->audioGroups[i];
+        if (dw->sond.count <= (uint32_t) soundIndex) {
+            continue;
+        } else {
+            return RValue_makeString(dw->sond.sounds[soundIndex].name);
+        }
+    }
+    return RValue_makeString("<undefined>");
+}
+
 // same as builtin_sound_play with loop enabled
 static RValue builtin_sound_loop(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
@@ -6473,6 +6641,15 @@ static RValue builtin_audio_master_gain(VMContext* ctx, RValue* args, MAYBE_UNUS
     if (audio == nullptr) return RValue_makeUndefined();
     float gain = (float) RValue_toReal(args[0]);
     audio->vtable->setMasterGain(audio, gain);
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_audio_set_master_gain(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    AudioSystem* audio = getAudioSystem(ctx);
+    if (audio == nullptr) return RValue_makeUndefined();
+    int32_t id = RValue_toInt32(args[0]);
+    float gain = (float) RValue_toReal(args[1]);
+    audio->vtable->setMasterGainForListener(audio, gain, id);
     return RValue_makeUndefined();
 }
 
@@ -7107,7 +7284,7 @@ static RValue builtin_file_text_read_string(VMContext* ctx, RValue* args, int32_
     }
 
     int32_t len = file->readPos - start;
-    char* result = safeMalloc((size_t) len + 1);
+    char* result = (char *)safeMalloc((size_t) len + 1);
     memcpy(result, file->content + start, (size_t) len);
     result[len] = '\0';
     return RValue_makeOwnedString(result);
@@ -7142,7 +7319,7 @@ static RValue builtin_file_text_readln(VMContext* ctx, RValue* args, int32_t arg
     }
 
     // Now we copy it because we already know the size of the string!
-    char* string = safeMalloc(size + 1); // +1 because the last one is null
+    char* string = (char *)safeMalloc(size + 1); // +1 because the last one is null
     memcpy(string, file->content + file->readPos, size);
     string[size] = '\0';
     file->readPos = readPos;
@@ -7180,7 +7357,7 @@ static RValue builtin_file_text_write_string(VMContext* ctx, RValue* args, int32
     char* str = RValue_toString(args[1]);
     size_t oldLen = strlen(file->writeBuffer);
     size_t addLen = strlen(str);
-    file->writeBuffer = safeRealloc(file->writeBuffer, oldLen + addLen + 1);
+    file->writeBuffer = (char *)safeRealloc(file->writeBuffer, oldLen + addLen + 1);
     memcpy(file->writeBuffer + oldLen, str, addLen);
     file->writeBuffer[oldLen + addLen] = '\0';
     free(str);
@@ -7198,7 +7375,7 @@ static RValue builtin_file_text_writeln(VMContext* ctx, RValue* args, int32_t ar
     if (!file->isWriteMode) return RValue_makeUndefined();
 
     size_t oldLen = strlen(file->writeBuffer);
-    file->writeBuffer = safeRealloc(file->writeBuffer, oldLen + 2);
+    file->writeBuffer = (char *)safeRealloc(file->writeBuffer, oldLen + 2);
     file->writeBuffer[oldLen] = '\n';
     file->writeBuffer[oldLen + 1] = '\0';
 
@@ -7217,7 +7394,7 @@ static RValue builtin_file_text_write_real(VMContext* ctx, RValue* args, int32_t
     char* str = RValue_toString(args[1]);
     size_t oldLen = strlen(file->writeBuffer);
     size_t addLen = strlen(str);
-    file->writeBuffer = safeRealloc(file->writeBuffer, oldLen + addLen + 1);
+    file->writeBuffer = (char *)safeRealloc(file->writeBuffer, oldLen + addLen + 1);
     memcpy(file->writeBuffer + oldLen, str, addLen);
     file->writeBuffer[oldLen + addLen] = '\0';
     free(str);
@@ -7740,7 +7917,7 @@ static RValue builtin_window_set_caption(VMContext* ctx, MAYBE_UNUSED RValue* ar
     bool changed = runner->windowTitle == nullptr || strcmp(runner->windowTitle, val) != 0;
     if (changed) {
         free(runner->windowTitle);
-        runner->windowTitle = strdup(val);
+        runner->windowTitle = safeStrdup(val);
         if (runner->setWindowTitle) {
             runner->setWindowTitle(val);
             printf("Runner: Window title set to: %s\n", val);
@@ -7753,7 +7930,7 @@ static RValue builtin_window_set_caption(VMContext* ctx, MAYBE_UNUSED RValue* ar
 
 static RValue builtin_window_get_caption(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
-    return RValue_makeOwnedString(strdup(runner->windowTitle ? runner->windowTitle : ""));
+    return RValue_makeOwnedString(safeStrdup(runner->windowTitle ? runner->windowTitle : ""));
 }
 
 static RValue builtin_window_has_focus(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -7960,7 +8137,7 @@ static RValue builtin_instance_create_layer(VMContext* ctx, RValue* args, int32_
                     variableInstanceSetOn(
                         ctx,
                         inst,
-                        requireNotNullMessage(name, "Trying to set a variable that we do not know the name of! Bug?"),
+                        (const char *)requireNotNullMessage(name, "Trying to set a variable that we do not know the name of! Bug?"),
                         target,
                         "instance_create_layer"
                     );
@@ -8621,7 +8798,7 @@ static RValue builtin_action_set_vspeed(VMContext* ctx, MAYBE_UNUSED RValue* arg
 static int32_t gmlBufferCreate(Runner* runner, int32_t size, int32_t type, int32_t alignment) {
     GmlBuffer buf = {0};
     buf.size = size > 0 ? size : 1;
-    buf.data = safeCalloc((size_t) buf.size, 1);
+    buf.data = (uint8_t *)safeCalloc((size_t) buf.size, 1);
     buf.position = 0;
     buf.usedSize = (type == GML_BUFFER_GROW) ? 0 : buf.size;
     buf.alignment = alignment > 0 ? alignment : 1;
@@ -8651,7 +8828,7 @@ static void gmlBufferEnsureSize(GmlBuffer* buf, int32_t newSize) {
     // Double or use newSize, whichever is larger
     int32_t newAlloc = buf->size * 2;
     if (newAlloc < newSize) newAlloc = newSize;
-    buf->data = safeRealloc(buf->data, (size_t) newAlloc);
+    buf->data = (uint8_t *)safeRealloc(buf->data, (size_t) newAlloc);
     memset(buf->data + buf->size, 0, (size_t) (newAlloc - buf->size));
     buf->size = newAlloc;
 }
@@ -8862,7 +9039,7 @@ static RValue builtin_buffer_read(MAYBE_UNUSED VMContext* ctx, RValue* args, MAY
                 buf->position++;
             }
             int32_t len = buf->position - start;
-            char* str = safeMalloc((size_t) len + 1);
+            char* str = (char *)safeMalloc((size_t) len + 1);
             memcpy(str, buf->data + start, (size_t) len);
             str[len] = '\0';
             // Skip past the null terminator
@@ -8875,7 +9052,7 @@ static RValue builtin_buffer_read(MAYBE_UNUSED VMContext* ctx, RValue* args, MAY
             int32_t start = buf->position;
             int32_t len = buf->size - start;
             if (0 > len) len = 0;
-            char* str = safeMalloc((size_t) len + 1);
+            char* str = (char *)safeMalloc((size_t) len + 1);
             if (len > 0) memcpy(str, buf->data + start, (size_t) len);
             str[len] = '\0';
             buf->position = buf->size;
@@ -9010,7 +9187,7 @@ static RValue builtin_buffer_save_ext(MAYBE_UNUSED VMContext* ctx, RValue* args,
 static char* gmlAsyncBufferResolvePath(const char* groupName, const char* filename) {
     if (groupName == nullptr || groupName[0] == '\0') return safeStrdup(filename);
     size_t length = strlen(groupName) + 1 + strlen(filename) + 1;
-    char* path = safeMalloc(length);
+    char* path = (char *)safeMalloc(length);
     snprintf(path, length, "%s/%s", groupName, filename);
     return path;
 }
@@ -9138,36 +9315,6 @@ static RValue builtin_buffer_async_group_end(MAYBE_UNUSED VMContext* ctx, MAYBE_
     return RValue_makeReal((GMLReal) requestId);
 }
 
-// filename_change_ext(fname, newext): changes the extension of fname to newext
-// (see GameMaker-HTML5 Function_File.js for reference)
-static RValue builtin_filename_change_ext(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    if (2 > argCount) return RValue_makeUndefined();
-
-    char* fname = RValue_toString(args[0]);
-    char* newext = RValue_toString(args[1]); // includes the ., example: ".gmk"
-
-    char *last = strrchr(fname, '.');
-
-    if (last != nullptr && last != 0) {
-        long index = last - fname;
-        char* new_name = safeMalloc(index + strlen(newext) + 1);
-        memcpy(new_name, fname, (size_t) index);
-        memcpy(new_name + index, newext, (size_t) strlen(newext));
-        new_name[index + strlen(newext)] = '\0';
-        RValue result = RValue_makeOwnedString(new_name);
-
-        free(fname);
-        free(newext);
-
-        return result;
-    }
-
-    free(newext);
-
-    // If there isn't a dot, we return the original string as is
-    return RValue_makeOwnedString(fname);
-}
-
 static RValue builtin_buffer_base64_encode(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     if (3 > argCount) return RValue_makeOwnedString(safeStrdup(""));
@@ -9189,7 +9336,7 @@ static RValue builtin_buffer_base64_encode(MAYBE_UNUSED VMContext* ctx, RValue* 
         size = (size_t)(maxBoundary - offset);
     }
 
-    char* out = safeMalloc(BASE64_ENCODE_OUT_SIZE(size));
+    char* out = (char *)safeMalloc(BASE64_ENCODE_OUT_SIZE(size));
     base64_encode((const unsigned char*) buf->data + offset, size, out);
     return RValue_makeOwnedString(out);
 }
@@ -9200,7 +9347,7 @@ static RValue builtin_buffer_base64_decode(MAYBE_UNUSED VMContext* ctx, RValue* 
     char* input = RValue_toString(args[1]);
     unsigned int inLen = (unsigned int) strlen(input);
     size_t outLen = BASE64_DECODE_OUT_SIZE(inLen);
-    uint8_t* out = safeMalloc(outLen);
+    uint8_t* out = (uint8_t *)safeMalloc(outLen);
     base64_decode(input, inLen, out);
     free(input);
     int32_t id = gmlBufferCreate(runner, outLen, GML_BUFFER_GROW, 1);
@@ -9216,7 +9363,7 @@ static RValue builtin_base64_encode(MAYBE_UNUSED VMContext* ctx, RValue* args, M
     if (1 > argCount) return RValue_makeOwnedString(safeStrdup(""));
     char* input = RValue_toString(args[0]);
     unsigned int inLen = (unsigned int) strlen(input);
-    char* out = safeMalloc(BASE64_ENCODE_OUT_SIZE(inLen));
+    char* out = (char *)safeMalloc(BASE64_ENCODE_OUT_SIZE(inLen));
     base64_encode((const unsigned char*) input, inLen, out);
     free(input);
     return RValue_makeOwnedString(out);
@@ -9227,7 +9374,7 @@ static RValue builtin_base64_decode(MAYBE_UNUSED VMContext* ctx, RValue* args, M
     char* input = RValue_toString(args[0]);
     unsigned int inLen = (unsigned int) strlen(input);
     unsigned int outCap = BASE64_DECODE_OUT_SIZE(inLen);
-    unsigned char* out = safeMalloc(outCap + 1);
+    unsigned char* out = (unsigned char *)safeMalloc(outCap + 1);
     unsigned int outLen = base64_decode(input, inLen, out);
     out[outLen] = '\0';
     free(input);
@@ -9237,7 +9384,7 @@ static RValue builtin_base64_decode(MAYBE_UNUSED VMContext* ctx, RValue* args, M
 // Converts the "digest" to a hex string
 static char* convertToHexString(unsigned char* digest, int32_t digestLength) {
     int32_t stringLength = digestLength * 2;
-    char* hex = safeMalloc(stringLength + 1);
+    char* hex = (char *)safeMalloc(stringLength + 1);
     for (int32_t i = 0; digestLength > i; i++) {
         sprintf(&hex[i * 2], "%02x", digest[i]);
     }
@@ -9337,6 +9484,60 @@ static RValue builtin_md5_file(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_
     MD5Final(digest, &sctx);
 
     return RValue_makeOwnedString(convertToHexString(digest, 16));
+}
+
+// filename_change_ext(fname, newext): changes the extension of fname to newext
+// (see GameMaker-HTML5 Function_File.js for reference)
+static RValue builtin_filename_change_ext(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (2 > argCount) return RValue_makeUndefined();
+
+    char* fname = RValue_toString(args[0]);
+    char* newext = RValue_toString(args[1]); // includes the ., example: ".gmk"
+
+    char *last = strrchr(fname, '.');
+
+    if (last != nullptr && last != 0) {
+        long index = last - fname;
+        char* new_name = (char* )safeMalloc(index + strlen(newext) + 1);
+        memcpy(new_name, fname, (size_t) index);
+        memcpy(new_name + index, newext, (size_t) strlen(newext));
+        new_name[index + strlen(newext)] = '\0';
+        RValue result = RValue_makeOwnedString(new_name);
+
+        free(fname);
+        free(newext);
+
+        return result;
+    }
+
+    free(newext);
+
+    // If there isn't a dot, we return the original string as is
+    return RValue_makeOwnedString(fname);
+}
+
+// filename_name(fname): returns the name part of the indicated file, with the extension but without the path
+// (see GameMaker-HTML5 Function_File.js for reference)
+static RValue builtin_filename_name(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeOwnedString(safeStrdup(""));
+
+    char* fname = RValue_toString(args[0]);
+    if (fname == nullptr) return RValue_makeOwnedString(safeStrdup(""));
+
+    char* lastBackslash = strrchr(fname, '\\');
+    char* lastSlash = strrchr(fname, '/');
+    char* last = lastBackslash > lastSlash ? lastBackslash : lastSlash;
+
+    char* result;
+    if (last != nullptr) {
+        result = safeStrdup(last + 1);
+    } else {
+        result = fname;
+        fname = nullptr;
+    }
+
+    free(fname);
+    return RValue_makeOwnedString(result);
 }
 
 // buffer_get_surface(buffer, surface, offset) -> bool
@@ -9608,6 +9809,11 @@ static RValue builtin_draw_rectangle(VMContext* ctx, RValue* args, MAYBE_UNUSED 
     float x2 = (float) RValue_toReal(args[2]);
     float y2 = (float) RValue_toReal(args[3]);
     bool outline = RValue_toBool(args[4]);
+    if (runner->applyOffsetForPrimitives) {
+        x2 += 1.0f; y2 += 1.0f;
+        if (x2 == floorf(x2)) x2 += 0.01f;
+        if (y2 == floorf(x2)) y2 += 0.01f;
+    }
     runner->renderer->vtable->drawRectangle(runner->renderer, x1, y1, x2, y2, runner->renderer->drawColor, runner->renderer->drawAlpha, outline);
     return RValue_makeUndefined();
 }
@@ -9625,7 +9831,11 @@ static RValue builtin_draw_rectangle_color(VMContext* ctx, RValue* args, MAYBE_U
     uint32_t color3 = (uint32_t) RValue_toInt32(args[6]);
     uint32_t color4 = (uint32_t) RValue_toInt32(args[7]);
     bool outline = RValue_toBool(args[8]);
-
+    if (runner->applyOffsetForPrimitives) {
+        x2 += 1.0f; y2 += 1.0f;
+        if (x2 == floorf(x2)) x2 += 0.01f;
+        if (y2 == floorf(x2)) y2 += 0.01f;
+    }
     runner->renderer->vtable->drawRectangleColor(runner->renderer, x1, y1, x2, y2, color1, color2, color3, color4, runner->renderer->drawAlpha, outline);
     return RValue_makeUndefined();
 }
@@ -9815,10 +10025,10 @@ static RValue builtin_draw_text_color(VMContext* ctx, RValue* args, MAYBE_UNUSED
     float x = (float) RValue_toReal(args[0]);
     float y = (float) RValue_toReal(args[1]);
     char* str = RValue_toString(args[2]);
-    int32_t c1 = (float) RValue_toInt32(args[3]);
-    int32_t c2 = (float) RValue_toInt32(args[4]);
-    int32_t c3 = (float) RValue_toInt32(args[5]);
-    int32_t c4 = (float) RValue_toInt32(args[6]);
+    int32_t c1 = RValue_toInt32(args[3]);
+    int32_t c2 = RValue_toInt32(args[4]);
+    int32_t c3 = RValue_toInt32(args[5]);
+    int32_t c4 = RValue_toInt32(args[6]);
     float alpha = (float) RValue_toReal(args[7]);
 
     PreprocessedText processedText = TextUtils_preprocessGmlTextIfNeeded(runner, str);
@@ -9838,10 +10048,10 @@ static RValue builtin_draw_text_color_transformed(VMContext* ctx, RValue* args, 
     float xscale = (float) RValue_toReal(args[3]);
     float yscale = (float) RValue_toReal(args[4]);
     float angle = (float) RValue_toReal(args[5]);
-    int32_t c1 = (float) RValue_toInt32(args[6]);
-    int32_t c2 = (float) RValue_toInt32(args[7]);
-    int32_t c3 = (float) RValue_toInt32(args[8]);
-    int32_t c4 = (float) RValue_toInt32(args[9]);
+    int32_t c1 = RValue_toInt32(args[6]);
+    int32_t c2 = RValue_toInt32(args[7]);
+    int32_t c3 = RValue_toInt32(args[8]);
+    int32_t c4 = RValue_toInt32(args[9]);
     float alpha = (float) RValue_toReal(args[10]);
 
     PreprocessedText processedText = TextUtils_preprocessGmlTextIfNeeded(runner, str);
@@ -9873,10 +10083,10 @@ static RValue builtin_draw_text_color_ext(VMContext* ctx, RValue* args, MAYBE_UN
     char* str = RValue_toString(args[2]);
     int32_t separation = RValue_toInt32(args[3]);
     int32_t width = RValue_toInt32(args[4]);
-    int32_t c1 = (float) RValue_toInt32(args[5]);
-    int32_t c2 = (float) RValue_toInt32(args[6]);
-    int32_t c3 = (float) RValue_toInt32(args[7]);
-    int32_t c4 = (float) RValue_toInt32(args[8]);
+    int32_t c1 = RValue_toInt32(args[5]);
+    int32_t c2 = RValue_toInt32(args[6]);
+    int32_t c3 = RValue_toInt32(args[7]);
+    int32_t c4 = RValue_toInt32(args[8]);
     float alpha = (float) RValue_toReal(args[9]);
 
     drawTextColorExtCommon(runner, str, x, y, 1.0f, 1.0f, 0.0f, separation, width, c1, c2, c3, c4, alpha);
@@ -9896,10 +10106,10 @@ static RValue builtin_draw_text_color_ext_transformed(VMContext* ctx, RValue* ar
     float xscale = (float) RValue_toReal(args[5]);
     float yscale = (float) RValue_toReal(args[6]);
     float angle = (float) RValue_toReal(args[7]);
-    int32_t c1 = (float) RValue_toInt32(args[8]);
-    int32_t c2 = (float) RValue_toInt32(args[9]);
-    int32_t c3 = (float) RValue_toInt32(args[10]);
-    int32_t c4 = (float) RValue_toInt32(args[11]);
+    int32_t c1 = RValue_toInt32(args[8]);
+    int32_t c2 = RValue_toInt32(args[9]);
+    int32_t c3 = RValue_toInt32(args[10]);
+    int32_t c4 = RValue_toInt32(args[11]);
     float alpha = (float) RValue_toReal(args[12]);
 
     drawTextColorExtCommon(runner, str, x, y, xscale, yscale, angle, separation, width, c1, c2, c3, c4, alpha);
@@ -10075,6 +10285,10 @@ static RValue builtin_draw_line(VMContext* ctx, RValue* args, MAYBE_UNUSED int32
         float y1 = (float) RValue_toReal(args[1]);
         float x2 = (float) RValue_toReal(args[2]);
         float y2 = (float) RValue_toReal(args[3]);
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+        }
         runner->renderer->vtable->drawLine(runner->renderer, x1, y1, x2, y2, 1.0f, runner->renderer->drawColor, runner->renderer->drawAlpha);
     }
     return RValue_makeUndefined();
@@ -10090,6 +10304,10 @@ static RValue builtin_draw_line_colour(VMContext* ctx, RValue* args, MAYBE_UNUSE
         float y2 = (float) RValue_toReal(args[3]);
         float col1 = (float) RValue_toReal(args[4]);
         float col2 = (float) RValue_toReal(args[5]);
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+        }
         runner->renderer->vtable->drawLineColor(runner->renderer, x1, y1, x2, y2, 1.0f, col1, col2, runner->renderer->drawAlpha);
     }
     return RValue_makeUndefined();
@@ -10104,6 +10322,10 @@ static RValue builtin_draw_line_width(VMContext* ctx, RValue* args, MAYBE_UNUSED
         float x2 = (float) RValue_toReal(args[2]);
         float y2 = (float) RValue_toReal(args[3]);
         float w = (float) RValue_toReal(args[4]);
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+        }
         runner->renderer->vtable->drawLine(runner->renderer, x1, y1, x2, y2, w, runner->renderer->drawColor, runner->renderer->drawAlpha);
     }
     return RValue_makeUndefined();
@@ -10120,6 +10342,10 @@ static RValue builtin_draw_line_width_colour(VMContext* ctx, RValue* args, MAYBE
         float w = (float) RValue_toReal(args[4]);
         uint32_t col1 = (uint32_t) RValue_toInt32(args[5]);
         uint32_t col2 = (uint32_t) RValue_toInt32(args[6]);
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+        }
         runner->renderer->vtable->drawLineColor(runner->renderer, x1, y1, x2, y2, w, col1, col2, runner->renderer->drawAlpha);
     }
     return RValue_makeUndefined();
@@ -10137,6 +10363,11 @@ static RValue builtin_draw_triangle(VMContext* ctx, RValue* args, MAYBE_UNUSED i
         float y3 = (float) RValue_toReal(args[5]);
         bool outline = (float) RValue_toBool(args[6]);
         uint32_t color = runner->renderer->drawColor;
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+            x3 += 1.0f; y3 += 1.0f;
+        }
         runner->renderer->vtable->drawTriangle(runner->renderer, x1, y1, x2, y2, x3, y3, color, color, color, runner->renderer->drawAlpha, outline);
     }
     return RValue_makeUndefined();
@@ -10156,6 +10387,11 @@ static RValue builtin_draw_triangle_color(VMContext* ctx, RValue* args, MAYBE_UN
         uint32_t col2 = (uint32_t) RValue_toInt32(args[7]);
         uint32_t col3 = (uint32_t) RValue_toInt32(args[8]);
         bool outline = RValue_toBool(args[9]);
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+            x3 += 1.0f; y3 += 1.0f;
+        }
         runner->renderer->vtable->drawTriangle(runner->renderer, x1, y1, x2, y2, x3, y3, col1, col2, col3, runner->renderer->drawAlpha, outline);
     }
     return RValue_makeUndefined();
@@ -10169,6 +10405,9 @@ static RValue builtin_draw_circle(VMContext* ctx, RValue* args, MAYBE_UNUSED int
         float y = (float) RValue_toReal(args[1]);
         float r = (float) RValue_toReal(args[2]);
         bool outline = RValue_toBool(args[3]);
+        if (runner->applyOffsetForPrimitives) {
+            x += 1.0f; y += 1.0f;
+        }
         Renderer_drawCircle(runner->renderer, x, y, r, outline);
     }
     return RValue_makeUndefined();
@@ -10199,6 +10438,10 @@ static RValue builtin_draw_ellipse(VMContext* ctx, RValue* args, MAYBE_UNUSED in
         float y2 = (float) RValue_toReal(args[3]);
         bool outline = RValue_toBool(args[4]);
         uint32_t color = runner->renderer->drawColor;
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+        }
         Renderer_drawEllipseColor(runner->renderer, (x1 + x2) * 0.5f, (y1 + y2) * 0.5f, (x2 - x1) * 0.5f, (y2 - y1) * 0.5f, color, color, outline);
     }
     return RValue_makeUndefined();
@@ -10215,6 +10458,10 @@ static RValue builtin_draw_ellipse_color(VMContext* ctx, RValue* args, MAYBE_UNU
         uint32_t col1 = (uint32_t) RValue_toInt32(args[4]);
         uint32_t col2 = (uint32_t) RValue_toInt32(args[5]);
         bool outline = RValue_toBool(args[6]);
+        if (runner->applyOffsetForPrimitives) {
+            x1 += 1.0f; y1 += 1.0f;
+            x2 += 1.0f; y2 += 1.0f;
+        }
         Renderer_drawEllipseColor(runner->renderer, (x1 + x2) * 0.5f, (y1 + y2) * 0.5f, (x2 - x1) * 0.5f, (y2 - y1) * 0.5f, col1, col2, outline);
     }
     return RValue_makeUndefined();
@@ -10274,6 +10521,22 @@ static RValue builtin_draw_get_font(VMContext* ctx, MAYBE_UNUSED RValue* args, M
     Runner* runner = ctx->runner;
     if (runner->renderer != nullptr) {
         return RValue_makeInt32(runner->renderer->drawFont);
+    }
+    return RValue_makeInt32(-1);
+}
+
+static RValue builtin_draw_get_halign(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    if (runner->renderer != nullptr) {
+        return RValue_makeInt32(runner->renderer->drawHalign);
+    }
+    return RValue_makeInt32(-1);
+}
+
+static RValue builtin_draw_get_valign(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    if (runner->renderer != nullptr) {
+        return RValue_makeInt32(runner->renderer->drawValign);
     }
     return RValue_makeInt32(-1);
 }
@@ -10648,6 +10911,42 @@ static RValue builtin_sprite_get_name(VMContext* ctx, RValue* args, MAYBE_UNUSED
     if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeString("<undefined>");
     const char* name = ctx->dataWin->sprt.sprites[spriteIndex].name;
     return RValue_makeString(name != nullptr ? name : "<undefined>");
+}
+
+// sprite_set_bbox_mode(sprite_index, mode)
+static RValue builtin_sprite_set_bbox_mode(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (argCount < 2) return RValue_makeUndefined();
+
+    int32_t spriteIndex = RValue_toInt32(args[0]);
+    uint32_t mode = (uint32_t) RValue_toReal(args[1]);
+
+    Runner* runner = ctx->runner;
+    DataWin* dw = runner->dataWin;
+
+    if (spriteIndex < 0 || (uint32_t)spriteIndex >= dw->sprt.count) {
+        return RValue_makeUndefined();
+    }
+
+    Sprite* spr = &dw->sprt.sprites[spriteIndex];
+
+    if (spr->bboxMode == mode) {
+        return RValue_makeUndefined();
+    }
+
+    spr->bboxMode = mode;
+
+    int32_t instanceCount = (int32_t)arrlen(runner->instances);
+    for (int32_t i = 0; i < instanceCount; i++) {
+        Instance* inst = runner->instances[i];
+        if (!inst->active || inst->destroyed) continue;
+
+        int32_t activeMask = (inst->maskIndex >= 0) ? inst->maskIndex : inst->spriteIndex;
+        if (activeMask == spriteIndex) {
+            SpatialGrid_markInstanceAsDirty(runner->spatialGrid, inst);
+        }
+    }
+
+    return RValue_makeUndefined();
 }
 
 // sprite_set_offset(sprite_index, xoff, yoff)
@@ -11398,6 +11697,92 @@ static RValue builtin_collision_circle(VMContext* ctx, RValue* args, int32_t arg
     return RValue_makeReal((GMLReal) resultId);
 }
 
+static RValue builtin_collision_line_list(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (9 > argCount) return RValue_makeReal(0.0);
+
+    Runner* runner = ctx->runner;
+    GMLReal x1 = RValue_toReal(args[0]);
+    GMLReal y1 = RValue_toReal(args[1]);
+    GMLReal x2 = RValue_toReal(args[2]);
+    GMLReal y2 = RValue_toReal(args[3]);
+    int32_t target = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[4]));
+    int32_t prec = RValue_toInt32(args[5]);
+    int32_t notme = RValue_toInt32(args[6]);
+    int32_t listId = RValue_toInt32(args[7]);
+    // arg 8 (ordered) ignored here too; appended in iteration order
+
+    if (target == INSTANCE_NOONE) return RValue_makeReal(0.0);
+    DsList* list = dsListGet(runner, listId);
+    if (list == nullptr) return RValue_makeReal(0.0);
+
+    if (runner->collisionCompatibilityMode) {
+        x1 = compatRoundCoord(x1); y1 = compatRoundCoord(y1);
+        x2 = compatRoundCoord(x2); y2 = compatRoundCoord(y2);
+    }
+
+    GMLReal bx1 = GMLReal_fmin(x1, x2);
+    GMLReal by1 = GMLReal_fmin(y1, y2);
+    GMLReal bx2 = GMLReal_fmax(x1, x2);
+    GMLReal by2 = GMLReal_fmax(y1, y2);
+
+    Instance* self = ctx->currentInstance;
+    int32_t count = 0;
+
+    SpatialGrid_syncGrid(runner, runner->spatialGrid);
+    SpatialGridQuery query = SpatialGrid_prepareQuery(runner, bx1, by1, bx2, by2, target);
+
+    for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx; gx++) {
+        for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy; gy++) {
+            Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
+            int32_t cellLen = (int32_t) arrlen(cell);
+            repeat(cellLen, ci) {
+                Instance* inst = cell[ci];
+                if (!inst->active) continue;
+                if (notme && inst == self) continue;
+                if (inst->lastCollisionQueryId == query.queryId) continue;
+                inst->lastCollisionQueryId = query.queryId;
+
+                if (!query.matchAll && query.filterByObject && !VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, target)) continue;
+                if (!query.matchAll && query.filterByInstanceId && inst->instanceId != (uint32_t) target) continue;
+
+                InstanceBBox bbox = Collision_computeBBox(ctx->runner, inst);
+
+                GMLReal tEnter, tExit;
+                if (!Collision_segmentVsAARectClip(x1, y1, x2, y2, bbox.left, bbox.top, bbox.right, bbox.bottom, &tEnter, &tExit)) continue;
+
+                if (prec != 0) {
+                    Sprite* spr = Collision_getSprite(ctx->dataWin, inst);
+                    if (Collision_hasFrameMasks(spr)) {
+                        // Walk only the portion of the segment that's actually
+                        // inside the bbox (clipped by tEnter/tExit), stepping
+                        // roughly one pixel at a time, checking the mask.
+                        GMLReal dx = x2 - x1;
+                        GMLReal dy = y2 - y1;
+                        GMLReal segLen = GMLReal_sqrt(dx * dx + dy * dy);
+                        int32_t steps = (int32_t) GMLReal_ceil(segLen * (tExit - tEnter));
+                        if (steps < 1) steps = 1;
+
+                        bool found = false;
+                        for (int32_t s = 0; s <= steps && !found; s++) {
+                            GMLReal t = tEnter + (tExit - tEnter) * ((GMLReal) s / (GMLReal) steps);
+                            GMLReal px = x1 + dx * t;
+                            GMLReal py = y1 + dy * t;
+                            found = Collision_pointInInstance(spr, inst, px, py);
+                        }
+                        if (!found) continue;
+                    }
+                }
+
+                arrput(list->items, RValue_makeReal((GMLReal) inst->instanceId));
+                count++;
+            }
+        }
+    }
+
+    return RValue_makeReal((GMLReal) count);
+}
+
+
 // collision_rectangle_list(x1, y1, x2, y2, obj, prec, notme, list, ordered) -> count
 static RValue builtin_collision_rectangle_list(VMContext* ctx, RValue* args, int32_t argCount) {
     if (8 > argCount) return RValue_makeReal(0.0);
@@ -11465,6 +11850,105 @@ static RValue builtin_collision_rectangle_list(VMContext* ctx, RValue* args, int
                         for (int32_t py = startY; endY > py && !found; py++) {
                             for (int32_t px = startX; endX > px && !found; px++) {
                                 if (Collision_pointInInstance(spr, inst, (GMLReal) px + 0.5, (GMLReal) py + 0.5)) {
+                                    found = true;
+                                }
+                            }
+                        }
+                        if (!found) continue;
+                    }
+                }
+
+                arrput(list->items, RValue_makeReal((GMLReal) inst->instanceId));
+                count++;
+            }
+        }
+    }
+
+    return RValue_makeReal((GMLReal) count);
+}
+
+// collision_circle_list(x, y, radius, obj, prec, notme, list, ordered) -> count
+static RValue builtin_collision_circle_list(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (8 > argCount) return RValue_makeReal(0.0);
+
+    Runner* runner = ctx->runner;
+    GMLReal cx = RValue_toReal(args[0]);
+    GMLReal cy = RValue_toReal(args[1]);
+    GMLReal radius = RValue_toReal(args[2]);
+    int32_t targetObjIndex = VM_resolveInstanceTarget(ctx, RValue_toInt32(args[3]));
+    int32_t prec = RValue_toInt32(args[4]);
+    int32_t notme = RValue_toInt32(args[5]);
+    int32_t listId = RValue_toInt32(args[6]);
+
+    if (targetObjIndex == INSTANCE_NOONE) return RValue_makeReal(0.0);
+    DsList* list = dsListGet(runner, listId);
+    if (list == nullptr) return RValue_makeReal(0.0);
+    if (0 > radius) radius = -radius;
+    GMLReal radiusSq = radius * radius;
+
+    Instance* self = ctx->currentInstance;
+    if (runner->collisionCompatibilityMode) {
+        GMLReal qx1r = compatRoundCoord(cx - radius);
+        GMLReal qy1r = compatRoundCoord(cy - radius);
+        GMLReal qx2r = compatRoundCoord(cx + radius);
+        GMLReal qy2r = compatRoundCoord(cy + radius);
+        cx = (qx1r + qx2r) * 0.5;
+        cy = (qy1r + qy2r) * 0.5;
+        // Genuine collision_circle has qx2-qx1 == qy2-qy1 == 2r; use the smaller in case of rounding asymmetry.
+        GMLReal rx = (qx2r - qx1r) * 0.5;
+        GMLReal ry = (qy2r - qy1r) * 0.5;
+        radius = rx < ry ? rx : ry;
+        radiusSq = radius * radius;
+    }
+
+    GMLReal qx1 = cx - radius;
+    GMLReal qy1 = cy - radius;
+    GMLReal qx2 = cx + radius;
+    GMLReal qy2 = cy + radius;
+
+    SpatialGrid_syncGrid(runner, runner->spatialGrid);
+    SpatialGridQuery query = SpatialGrid_prepareQuery(runner, qx1, qy1, qx2, qy2, targetObjIndex);
+
+    int32_t count = 0;
+    for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx; gx++) {
+        for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy; gy++) {
+            Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
+            int32_t cellLen = (int32_t) arrlen(cell);
+            repeat(cellLen, ci) {
+                Instance* inst = cell[ci];
+                if (!inst->active) continue;
+                if (notme && inst == self) continue;
+                if (inst->lastCollisionQueryId == query.queryId) continue;
+                inst->lastCollisionQueryId = query.queryId;
+
+                if (!query.matchAll && query.filterByObject && !VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, targetObjIndex)) continue;
+                if (!query.matchAll && query.filterByInstanceId && inst->instanceId != (uint32_t) targetObjIndex) continue;
+
+                if (!Collision_circleOverlapsInstance(ctx->runner, inst, cx, cy, radius)) continue;
+
+                if (prec != 0) {
+                    Sprite* spr = Collision_getSprite(ctx->dataWin, inst);
+                    if (Collision_hasFrameMasks(spr)) {
+                        InstanceBBox bbox = Collision_computeBBox(ctx->runner, inst);
+                        GMLReal iLeft   = GMLReal_fmax(qx1, bbox.left);
+                        GMLReal iRight  = GMLReal_fmin(qx2, bbox.right);
+                        GMLReal iTop    = GMLReal_fmax(qy1, bbox.top);
+                        GMLReal iBottom = GMLReal_fmin(qy2, bbox.bottom);
+
+                        bool found = false;
+                        int32_t startX = (int32_t) GMLReal_floor(iLeft);
+                        int32_t endX   = (int32_t) GMLReal_ceil(iRight);
+                        int32_t startY = (int32_t) GMLReal_floor(iTop);
+                        int32_t endY   = (int32_t) GMLReal_ceil(iBottom);
+
+                        for (int32_t py = startY; endY > py && !found; py++) {
+                            for (int32_t px = startX; endX > px && !found; px++) {
+                                GMLReal wpx = (GMLReal) px + 0.5;
+                                GMLReal wpy = (GMLReal) py + 0.5;
+                                GMLReal ddx = wpx - cx;
+                                GMLReal ddy = wpy - cy;
+                                if (ddx * ddx + ddy * ddy > radiusSq) continue;
+                                if (Collision_pointInInstance(spr, inst, wpx, wpy)) {
                                     found = true;
                                 }
                             }
@@ -12162,21 +12646,21 @@ static RValue builtin_action_message(MAYBE_UNUSED VMContext* ctx, RValue* args, 
 
 // action_another_room(room_id) - jumps to the given room.
 static RValue builtin_action_another_room(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: action_another_room called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: action_another_room called but no runner!");
     runner->pendingRoom = RValue_toInt32(args[0]);
     return RValue_makeUndefined();
 }
 
 // action_current_room() -  restarts the current room.
 static RValue builtin_action_current_room(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: action_current_room called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: action_current_room called but no runner!");
     runner->pendingRoom = runner->currentRoomIndex;
     return RValue_makeUndefined();
 }
 
 // action_next_room() - goes to the next room in the room order.
 static RValue builtin_action_next_room(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: action_next_room called but no runner!");
+    Runner* runner = (Runner *)requireNotNullMessage(ctx->runner, "VM: action_next_room called but no runner!");
     int32_t nextPos = runner->currentRoomOrderPosition + 1;
     if ((int32_t) runner->dataWin->gen8.roomOrderCount > nextPos) {
         runner->pendingRoom = runner->dataWin->gen8.roomOrder[nextPos];
@@ -12332,7 +12816,7 @@ static RValue builtin_tile_add(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_
 
     uint32_t newId = runner->nextInstanceId++;
     uint32_t newCount = room->tileCount + 1;
-    room->tiles = safeRealloc(room->tiles, newCount * sizeof(RoomTile));
+    room->tiles = (RoomTile *)safeRealloc(room->tiles, newCount * sizeof(RoomTile));
     RoomTile* tile = &room->tiles[room->tileCount];
     tile->x = RValue_toInt32(args[5]);
     tile->y = RValue_toInt32(args[6]);
@@ -12732,7 +13216,7 @@ static RValue builtin_layer_create(VMContext* ctx, RValue* args, int32_t argCoun
         name = RValue_toString(args[1]);
     } else {
         // Technically could be smaller, but let's be safe
-        char* generatedName = safeMalloc(16);
+        char* generatedName = (char *)safeMalloc(16);
         snprintf(generatedName, 16, "_layer_%x", id);
         name = generatedName;
     }
@@ -12742,6 +13226,8 @@ static RValue builtin_layer_create(VMContext* ctx, RValue* args, int32_t argCoun
     runtimeLayer.visible = true;
     runtimeLayer.dynamic = true;
     runtimeLayer.dynamicName = name, // ownership transferred
+    runtimeLayer.beginScript = -1;
+    runtimeLayer.endScript = -1;
     arrput(runner->runtimeLayers, runtimeLayer);
     runner->drawableListStructureDirty = true;
     return RValue_makeReal((GMLReal) id);
@@ -12767,6 +13253,30 @@ static RValue builtin_layer_destroy(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     return RValue_makeUndefined();
 }
 
+static RValue builtin_layer_script_begin(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    int32_t layerId = resolveLayerIdArg(ctx->runner, args[0]);
+    int32_t scriptIndex = RValue_toInt32(args[1]);
+
+    RuntimeLayer* runtimeLayer = Runner_findRuntimeLayerById(ctx->runner, layerId);
+    if (runtimeLayer == nullptr) return RValue_makeUndefined();
+
+    runtimeLayer->beginScript = scriptIndex;
+
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_layer_script_end(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    int32_t layerId = resolveLayerIdArg(ctx->runner, args[0]);
+    int32_t scriptIndex = RValue_toInt32(args[1]);
+
+    RuntimeLayer* runtimeLayer = Runner_findRuntimeLayerById(ctx->runner, layerId);
+    if (runtimeLayer == nullptr) return RValue_makeUndefined();
+
+    runtimeLayer->endScript = scriptIndex;
+
+    return RValue_makeUndefined();
+}
+
 static RValue builtin_layer_background_create(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     int32_t layerId = resolveLayerIdArg(runner, args[0]);
@@ -12776,7 +13286,7 @@ static RValue builtin_layer_background_create(VMContext* ctx, RValue* args, MAYB
     if (runtimeLayer == nullptr)
         return RValue_makeReal(-1.0);
 
-    RuntimeBackgroundElement* bg = safeMalloc(sizeof(RuntimeBackgroundElement));
+    RuntimeBackgroundElement* bg = (RuntimeBackgroundElement *)safeMalloc(sizeof(RuntimeBackgroundElement));
     bg->spriteIndex = spriteIndex;
     bg->visible = true;
     bg->hTiled = false;
@@ -12849,6 +13359,17 @@ static RValue builtin_layer_background_visible(VMContext* ctx, RValue* args, MAY
     int32_t id = RValue_toInt32(args[0]);
     bool visible = RValue_toBool(args[1]);
     setBackgroundLayerField(id, visible, visible);
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_layer_background_speed(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    bool speed = RValue_toBool(args[1]);
+    RuntimeLayer* owner = nullptr;
+    Runner_findLayerElementById(runner, id, &owner);
+    owner->hSpeed = speed;
+    owner->vSpeed = speed;
     return RValue_makeUndefined();
 }
 
@@ -13077,6 +13598,27 @@ static RValue builtin_layer_get_element_type(VMContext* ctx, RValue* args, MAYBE
     return RValue_makeReal((GMLReal) el->type);
 }
 
+static RValue builtin_layer_element_move(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    int32_t elementId = RValue_toInt32(args[0]);
+    int32_t layerId = resolveLayerIdArg(runner, args[1]);
+    RuntimeLayer* rl = Runner_findRuntimeLayerById(runner, layerId);
+    RuntimeLayer* oldRl = nullptr;
+    RuntimeLayerElement* el = Runner_findLayerElementById(runner, elementId, &oldRl);
+
+    arrput(rl->elements, *el);
+
+    size_t count = arrlenu(oldRl->elements);
+    repeat(count, i) {
+        if (&oldRl->elements[i] == el) {
+            arrdel(oldRl->elements, i);
+            break;
+        }
+    }
+
+    return RValue_makeUndefined();
+}
+
 static RValue builtin_layer_tile_visible(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -13207,6 +13749,24 @@ static RValue builtin_layer_sprite_get_speed(VMContext* ctx, RValue* args, MAYBE
     if (!isValidLayerSpriteElement(el))
         return RValue_makeReal(0.0);
     return RValue_makeReal((GMLReal) el->spriteElement->animationSpeed);
+}
+
+static RValue builtin_layer_sprite_speed(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    RuntimeLayerElement* el = Runner_findLayerElementById(runner, id, nullptr);
+    if (isValidLayerSpriteElement(el))
+        el->spriteElement->animationSpeed = RValue_toReal(args[1]);
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_layer_sprite_blend(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    RuntimeLayerElement* el = Runner_findLayerElementById(runner, id, nullptr);
+    if (isValidLayerSpriteElement(el))
+        el->blend = RValue_toBool(args[1]);
+    return RValue_makeUndefined();
 }
 
 static RValue builtin_layer_sprite_get_index(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -13348,6 +13908,52 @@ static RValue builtin_tilemap_get_y(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     return RValue_makeReal((GMLReal) runtimeLayer->yOffset);
 }
 
+static RValue builtin_tilemap_get_width(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = ctx->runner;
+
+	RuntimeLayer* runtimeLayer;
+    RoomLayerTilesData* data = findTilemapData(runner, RValue_toInt32(args[0]), &runtimeLayer);
+    if (!data) return RValue_makeUndefined();
+
+    return RValue_makeReal(data->tilesX);
+}
+
+static RValue builtin_tilemap_get_height(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = ctx->runner;
+
+	RuntimeLayer* runtimeLayer;
+    RoomLayerTilesData* data = findTilemapData(runner, RValue_toInt32(args[0]), &runtimeLayer);
+    if (!data) return RValue_makeUndefined();
+
+    return RValue_makeReal(data->tilesY);
+}
+
+static RValue builtin_tilemap_get_tile_width(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = ctx->runner;
+
+	RuntimeLayer* runtimeLayer;
+    RoomLayerTilesData* data = findTilemapData(runner, RValue_toInt32(args[0]), &runtimeLayer);
+	if (!data) return RValue_makeUndefined();
+
+	Background* tileset = &runner->dataWin->bgnd.backgrounds[data->backgroundIndex];
+	return RValue_makeReal(tileset->gms2TileWidth);
+}
+
+static RValue builtin_tilemap_get_tile_height(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = ctx->runner;
+
+	RuntimeLayer* runtimeLayer;
+    RoomLayerTilesData* data = findTilemapData(runner, RValue_toInt32(args[0]), &runtimeLayer);
+	if (!data) return RValue_makeUndefined();
+
+	Background* tileset = &runner->dataWin->bgnd.backgrounds[data->backgroundIndex];
+	return RValue_makeReal(tileset->gms2TileHeight);
+}
+
 static void coerceTileCellsToTilemapBounds(RoomLayerTilesData* data, int32_t* cellX, int32_t* cellY) {
     if (0 > *cellX) *cellX = 0;
     if (0 > *cellY) *cellY = 0;
@@ -13428,6 +14034,33 @@ static RValue builtin_tilemap_get_at_pixel(VMContext* ctx, RValue* args, MAYBE_U
 
     uint32_t cell = data->tileData[cellIndex];
     return RValue_makeReal((GMLReal) cell);
+}
+
+static RValue builtin_tilemap_set(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (4 > argCount) return RValue_makeBool(false);
+    Runner* runner = ctx->runner;
+    RuntimeLayer* runtimeLayer = nullptr;
+    RoomLayerTilesData* data = findTilemapData(runner, RValue_toInt32(args[0]), &runtimeLayer);
+    requireNotNullMessage(runtimeLayer, "Missing Runtime Layer! Bug?");
+
+    int32_t cellX = RValue_toInt32(args[2]);
+    int32_t cellY = RValue_toInt32(args[3]);
+
+    if (cellX < 0 || cellY < 0 || cellX >= (int32_t)data->tilesX || cellY >= (int32_t)data->tilesY) {
+        return RValue_makeBool(false);
+    }
+
+    Background* tileset = &runner->dataWin->bgnd.backgrounds[data->backgroundIndex];
+
+    uint32_t cell = (uint32_t) RValue_toInt32(args[1]);
+    uint32_t tileIndex = (cell >> 0) & TILEINDEX_SHIFTEDMASK;
+    if (tileset != nullptr && tileset->gms2TileCount != 0 && tileIndex >= tileset->gms2TileCount) {
+        fprintf(stderr, "VM: [%s] tilemap_set() - tile index outside tile set count\n", ctx->currentCodeName);
+        return RValue_makeBool(false);
+    }
+
+    data->tileData[coerceTileCellsToTilemapBoundsAndConvertToArrayIndex(data, cellX, cellY)] = cell;
+    return RValue_makeBool(true);
 }
 
 // tilemap_set_at_pixel(tilemapElementId, tiledata, x, y): writes the raw tile cell value at the given room-space pixel coordinate. Returns whether the write happened.
@@ -13561,7 +14194,7 @@ static RValue builtin_array_create(VMContext* ctx, RValue* args, int32_t argCoun
 // @@This@@ - GMS2 internal function returning the current instance's ID.
 // Emitted by the GMS2 compiler for expressions like `self` when used as a value.
 static RValue builtin_This(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    Instance* instance = requireNotNullMessage(ctx->currentInstance, "Called @@This@@ while there isn't a current instance on the context!");
+    Instance* instance = (Instance *)requireNotNullMessage(ctx->currentInstance, "Called @@This@@ while there isn't a current instance on the context!");
     return RValue_makeInt32((int32_t) instance->instanceId);
 }
 
@@ -13709,7 +14342,7 @@ static RValue builtin_finish_catch(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RVa
 // @@throw@@ - throws a custom exception
 static RValue builtin_throw(VMContext* ctx, RValue* args, int32_t argCount) {
     char* message = RValue_toString(args[0]);
-    VMException* exception = safeCalloc(1, sizeof(VMException));
+    VMException* exception = (VMException *)safeCalloc(1, sizeof(VMException));
     exception->message = message;
     ctx->exception = exception;
     return RValue_makeUndefined();
@@ -14676,7 +15309,60 @@ static RValue builtin_json_encode(VMContext* ctx, RValue* args, int32_t argCount
     return RValue_makeOwnedString(result);
 }
 
-// json_decode
+// Recursively decode a JSON value into a GML value
+static RValue jsonDecodeValue(VMContext* ctx, JsonValue* json) {
+    if (json == nullptr) return RValue_makeUndefined();
+
+    switch (json->type) {
+        case JSON_NULL:
+            return RValue_makeUndefined();
+        case JSON_BOOL:
+            return RValue_makeBool(json->boolValue);
+        case JSON_NUMBER:
+            return RValue_makeReal((GMLReal)json->numberValue);
+        case JSON_STRING:
+            return RValue_makeOwnedString(safeStrdup(json->stringValue ? json->stringValue : ""));
+        case JSON_ARRAY: {
+            // For arrays, create a ds_list (matches HTML5 - _json_decode_array)
+            int32_t listId = dsListCreate(ctx->runner);
+            int len = JsonReader_arrayLength(json);
+            for (int i = 0; i < len; i++) {
+                JsonValue* item = JsonReader_getArrayElement(json, i);
+                RValue val = jsonDecodeValue(ctx, item);
+                DsList* list = dsListGet(ctx->runner, listId);
+                if (list != NULL) {
+                    arrput(list->items, val);
+                } else {
+                    RValue_free(&val);
+                }
+            }
+            return RValue_makeReal((GMLReal)listId);
+        }
+        case JSON_OBJECT: {
+            // For arrays, create a ds_map (matches HTML5 - _json_decode_object)
+            int32_t mapId = dsMapCreate(ctx->runner);
+            int len = JsonReader_objectLength(json);
+            for (int i = 0; i < len; i++) {
+                const char* key = JsonReader_getJsonKeyByIndex(json, i);
+                JsonValue* valJson = JsonReader_getJsonValueByIndex(json, i);
+                RValue val = jsonDecodeValue(ctx, valJson);
+                DsMapEntry** mapPtr = dsMapGet(ctx->runner, mapId);
+                if (mapPtr != nullptr) {
+                    char* keyCopy = safeStrdup(key);
+                    RValue storedVal = RValue_makeIndependent(val);
+                    RValue_free(&val);
+                    shput(*mapPtr, keyCopy, storedVal);
+                } else {
+                    RValue_free(&val);
+                }
+            }
+            return RValue_makeReal((GMLReal)mapId);
+        }
+        default:
+            return RValue_makeUndefined();
+    }
+}
+
 static RValue builtin_json_decode(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) {
         fprintf(stderr, "[json_decode] Expected at least 1 argument\n");
@@ -14684,24 +15370,30 @@ static RValue builtin_json_decode(VMContext* ctx, RValue* args, int32_t argCount
     }
 
     Runner* runner = ctx->runner;
-    int32_t mapIndex = dsMapCreate(runner);
-    DsMapEntry **mapPtr = dsMapGet(runner, mapIndex);
     const char* content = args[0].string;
-    JsonValue* json = JsonReader_parse(content);
-    // While the docs say "An invalid DS Map handle (-1) is returned in case the JSON could not be decoded.", when looking at the GameMaker-HTML5 source code it actually wraps in a "default" block when it fails to be parsed
-    if (json == nullptr) {
-        shput(*mapPtr, "default", RValue_makeIndependent(args[0]));
-    } else {
-        repeat(JsonReader_objectLength(json), i) {
-            const char *key = safeStrdup(JsonReader_getJsonKeyByIndex(json, i));
-            RValue val = RValue_makeOwnedString(safeStrdup(JsonReader_getString(JsonReader_getJsonValueByIndex(json, i))));
-            shput(*mapPtr, key, val);
-        }
 
-        JsonReader_free(json);
+    JsonValue* json = JsonReader_parse(content);
+    // While the docs say "An invalid ds_map handle (-1) is returned in case the JSON could not be decoded",
+    // when looking at the GameMaker-HTML5 source code it actually wraps in a "default" block when it fails to be parsed
+    if (json == nullptr) {
+        int32_t mapIndex = dsMapCreate(runner);
+        DsMapEntry** mapPtr = dsMapGet(runner, mapIndex);
+        if (mapPtr != nullptr) {
+            shput(*mapPtr, safeStrdup("default"), RValue_makeIndependent(args[0]));
+        }
+        return RValue_makeReal((GMLReal)mapIndex);
     }
 
-    return RValue_makeReal(mapIndex);
+    // Recursively decode the JSON
+    RValue result = jsonDecodeValue(ctx, json);
+    JsonReader_free(json);
+
+    // result should be a ds_map ID (from the top-level object)
+    if (result.type == RVALUE_REAL || result.type == RVALUE_INT32) {
+        return result;
+    }
+
+    return RValue_makeReal((GMLReal)dsMapCreate(runner));
 }
 
 static RValue builtin_object_exists(VMContext* ctx, RValue* args, int32_t argCount) {
@@ -14866,7 +15558,7 @@ static RValue builtin_object_is_ancestor(VMContext* ctx, RValue* args, int32_t a
     int32_t parentId = ctx->dataWin->objt.objects[id].parentId;
     if (parentId == -1) return RValue_makeBool(false);
 
-    while (parentId != -1) {
+    while (parentId >= -1) {
         if (parentId == ancestorId) return RValue_makeBool(true);
         parentId = ctx->dataWin->objt.objects[parentId].parentId;
     }
@@ -14916,7 +15608,7 @@ static RValue fontAddSpriteImpl(VMContext* ctx, int32_t spriteIndex, uint16_t* c
 
     // Allocate glyphs (+ 1 for synthetic space if needed)
     uint32_t totalGlyphs = hasSpace ? glyphCount : glyphCount + 1;
-    FontGlyph* glyphs = safeMalloc(totalGlyphs * sizeof(FontGlyph));
+    FontGlyph* glyphs = (FontGlyph *)safeMalloc(totalGlyphs * sizeof(FontGlyph));
 
     repeat(glyphCount, i) {
         int32_t tpagIdx = sprite->tpagIndices[i];
@@ -14966,7 +15658,7 @@ static RValue fontAddSpriteImpl(VMContext* ctx, int32_t spriteIndex, uint16_t* c
     // Grow the font array and create the new font
     uint32_t newFontIndex = dw->font.count;
     dw->font.count++;
-    dw->font.fonts = safeRealloc(dw->font.fonts, dw->font.count * sizeof(Font));
+    dw->font.fonts = (Font *)safeRealloc(dw->font.fonts, dw->font.count * sizeof(Font));
 
     Font* font = &dw->font.fonts[newFontIndex];
     font->name = "sprite_font";
@@ -15112,6 +15804,32 @@ static RValue builtin_asset_get_index(VMContext* ctx, RValue* args, int32_t argC
     return RValue_makeReal(value);
 }
 
+static RValue builtin_gpu_get_blendmode(VMContext* ctx, RValue* args, int32_t argCount) {
+    return RValue_makeInt32(ctx->runner->renderer->vtable->gpuGetBlendMode(ctx->runner->renderer));
+}
+
+static RValue builtin_gpu_get_blendmode_ext(VMContext* ctx, RValue* args, int32_t argCount) {
+    BlendFactors factors = ctx->runner->renderer->vtable->gpuGetBlendFactors(ctx->runner->renderer);
+
+    RValue arr = RValue_makeArray(GMLArray_create(ctx->dataWin->gen8.wadVersion, 2));
+    GMLArray_setOnArrayRef(&arr, 0, RValue_makeInt32(factors.src));
+    GMLArray_setOnArrayRef(&arr, 1, RValue_makeInt32(factors.dst));
+
+    return arr;
+}
+
+static RValue builtin_gpu_get_blendmode_ext_sepalpha(VMContext* ctx, RValue* args, int32_t argCount) {
+    BlendFactors factors = ctx->runner->renderer->vtable->gpuGetBlendFactors(ctx->runner->renderer);
+
+    RValue arr = RValue_makeArray(GMLArray_create(ctx->dataWin->gen8.wadVersion, 4));
+    GMLArray_setOnArrayRef(&arr, 0, RValue_makeInt32(factors.src));
+    GMLArray_setOnArrayRef(&arr, 1, RValue_makeInt32(factors.dst));
+    GMLArray_setOnArrayRef(&arr, 2, RValue_makeInt32(factors.srcAlpha));
+    GMLArray_setOnArrayRef(&arr, 3, RValue_makeInt32(factors.dstAlpha));
+
+    return arr;
+}
+
 static RValue builtin_gpu_set_blendmode(VMContext* ctx, RValue* args, int32_t argCount) {
     int mode = RValue_toReal(args[0]);
     ctx->runner->renderer->vtable->gpuSetBlendMode(ctx->runner->renderer, mode);
@@ -15121,7 +15839,16 @@ static RValue builtin_gpu_set_blendmode(VMContext* ctx, RValue* args, int32_t ar
 static RValue builtin_gpu_set_blendmode_ext(VMContext* ctx, RValue* args, int32_t argCount) {
     int sfactor = RValue_toReal(args[0]);
     int dfactor = RValue_toReal(args[1]);
-    ctx->runner->renderer->vtable->gpuSetBlendModeExt(ctx->runner->renderer, sfactor, dfactor);
+    ctx->runner->renderer->vtable->gpuSetBlendModeExt(ctx->runner->renderer, sfactor, dfactor, sfactor, dfactor);
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_gpu_set_blendmode_ext_sepalpha(VMContext* ctx, RValue* args, int32_t argCount) {
+    int sfactor = RValue_toReal(args[0]);
+    int dfactor = RValue_toReal(args[1]);
+    int sfactor_alpha = RValue_toReal(args[2]);
+    int dfactor_alpha = RValue_toReal(args[3]);
+    ctx->runner->renderer->vtable->gpuSetBlendModeExt(ctx->runner->renderer, sfactor, dfactor, sfactor_alpha, dfactor_alpha);
     return RValue_makeUndefined();
 }
 
@@ -15323,7 +16050,7 @@ static RValue builtin_shader_set_uniform_f_array(VMContext* ctx, MAYBE_UNUSED RV
     uint32_t count = GMLArray_length1D(arr);
     if (count == 0) return RValue_makeUndefined();
 
-    float* values = safeMalloc(count * sizeof(float));
+    float* values = (float *)safeMalloc(count * sizeof(float));
     for (uint32_t i = 0; i < count; i++) {
         values[i] = (float) RValue_toReal(*GMLArray_slot(arr, i));
     }
@@ -15403,6 +16130,13 @@ static RValue builtin_sprite_get_speed(VMContext* ctx, RValue* args, MAYBE_UNUSE
     return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].gms2PlaybackSpeed);
 }
 
+static RValue builtin_sprite_get_speed_type(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count)
+        return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].gms2PlaybackSpeedType);
+}
+
 static RValue builtin_font_get_uvs(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t fontIndex = (int32_t) RValue_toReal(args[0]);
 
@@ -15457,6 +16191,40 @@ static RValue builtin_texture_get_uvs(VMContext* ctx, MAYBE_UNUSED RValue* args,
     return RValue_makeArray(out);
 }
 
+
+// sprite_get_info(sprite): returns a struct with the sprite information.
+static RValue builtin_sprite_get_info(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    int32_t spriteIndex = RValue_toInt32(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeUndefined();
+    Sprite* sprite = &ctx->dataWin->sprt.sprites[spriteIndex];
+
+    Instance* ret = Runner_createStruct(ctx->runner);
+    VM_structSetAndFreeVal(ctx, ret, "width", RValue_makeReal(sprite->width), 0);
+    VM_structSetAndFreeVal(ctx, ret, "height", RValue_makeReal(sprite->height), 1);
+    VM_structSetAndFreeVal(ctx, ret, "xoffset", RValue_makeReal(sprite->originX), 2);
+    VM_structSetAndFreeVal(ctx, ret, "yoffset", RValue_makeReal(sprite->originY), 3);
+    VM_structSetAndFreeVal(ctx, ret, "transparent", RValue_makeBool(sprite->transparent), 4);
+    VM_structSetAndFreeVal(ctx, ret, "smooth", RValue_makeBool(sprite->smooth), 5);
+    VM_structSetAndFreeVal(ctx, ret, "type", RValue_makeBool(sprite->sSpriteType), 6);
+    VM_structSetAndFreeVal(ctx, ret, "bbox_left", RValue_makeReal(sprite->marginLeft), -1);
+    VM_structSetAndFreeVal(ctx, ret, "bbox_top", RValue_makeReal(sprite->marginTop), -1);
+    VM_structSetAndFreeVal(ctx, ret, "bbox_right", RValue_makeReal(sprite->marginRight), -1);
+    VM_structSetAndFreeVal(ctx, ret, "bbox_bottom", RValue_makeReal(sprite->marginBottom), -1);
+    VM_structSetAndFreeVal(ctx, ret, "name", RValue_makeString(sprite->name), -1);
+    VM_structSetAndFreeVal(ctx, ret, "num_subimages", RValue_makeReal(sprite->textureCount), -1);
+    VM_structSetAndFreeVal(ctx, ret, "use_mask", RValue_makeBool(sprite->maskCount == 0), -1);
+    VM_structSetAndFreeVal(ctx, ret, "num_masks", RValue_makeReal(sprite->maskCount), -1);
+    VM_structSetAndFreeVal(ctx, ret, "rotated_bounds", RValue_makeBool(false), -1);
+    VM_structSetAndFreeVal(ctx, ret, "nineslice", RValue_makeUndefined(), -1);
+    VM_structSetAndFreeVal(ctx, ret, "messages", RValue_makeUndefined(), -1);
+    VM_structSetAndFreeVal(ctx, ret, "frame_info", RValue_makeUndefined(), -1);
+    VM_structSetAndFreeVal(ctx, ret, "frame_speed", RValue_makeReal(sprite->gms2PlaybackSpeed), -1);
+    VM_structSetAndFreeVal(ctx, ret, "frame_type", RValue_makeReal(sprite->gms2PlaybackSpeedType), -1);
+
+    return RValue_makeStructAndIncRef(ret);
+}
+
 // ===[ REGISTRATION ]===
 
 void VMBuiltins_registerAll(VMContext* ctx) {
@@ -15489,6 +16257,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "string_repeat", builtin_string_repeat);
     VM_registerBuiltin(ctx, "string_format", builtin_string_format);
     VM_registerBuiltin(ctx, "string_count", builtin_string_count);
+    VM_registerBuiltin(ctx, "string_starts_with", builtin_string_starts_with);
     VM_registerBuiltin(ctx, "ord", builtin_ord);
     VM_registerBuiltin(ctx, "chr", builtin_chr);
 
@@ -15520,6 +16289,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "sign", builtin_sign);
     VM_registerBuiltin(ctx, "max", builtin_max);
     VM_registerBuiltin(ctx, "min", builtin_min);
+    VM_registerBuiltin(ctx, "mean", builtin_mean);
     VM_registerBuiltin(ctx, "median", builtin_median);
     VM_registerBuiltin(ctx, "power", builtin_power);
     VM_registerBuiltin(ctx, "sqrt", builtin_sqrt);
@@ -15539,6 +16309,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "clamp", builtin_clamp);
     VM_registerBuiltin(ctx, "lerp", builtin_lerp);
     VM_registerBuiltin(ctx, "tan", builtin_tan);
+    VM_registerBuiltin(ctx, "dot_product", builtin_dot_product);
     VM_registerBuiltin(ctx, "point_distance", builtin_point_distance);
     VM_registerBuiltin(ctx, "point_in_rectangle", builtin_point_in_rectangle);
     VM_registerBuiltin(ctx, "point_in_circle", builtin_point_in_circle);
@@ -15684,6 +16455,10 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "ds_map_create", builtin_ds_map_create);
     VM_registerBuiltin(ctx, "ds_map_delete", builtin_ds_map_delete);
     VM_registerBuiltin(ctx, "ds_map_add", builtin_ds_map_add);
+    VM_registerBuiltin(ctx, "ds_map_add_map", builtin_ds_map_add_map);
+    VM_registerBuiltin(ctx, "ds_map_add_list", builtin_ds_map_add_list);
+    VM_registerBuiltin(ctx, "ds_map_is_map", builtin_ds_map_is_map);
+    VM_registerBuiltin(ctx, "ds_map_is_list", builtin_ds_map_is_list);
     VM_registerBuiltin(ctx, "ds_map_clear", builtin_ds_map_clear);
     VM_registerBuiltin(ctx, "ds_map_set", builtin_ds_map_set);
     VM_registerBuiltin(ctx, "ds_map_set_pre", builtin_ds_map_set_pre);
@@ -15794,6 +16569,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     // Audio
     VM_registerBuiltin(ctx, "audio_system_is_available", builtin_audio_system_is_available);
     VM_registerBuiltin(ctx, "audio_exists", builtin_audio_exists);
+    VM_registerBuiltin(ctx, "audio_get_name", builtin_audio_get_name);
     VM_registerBuiltin(ctx, "audio_channel_num", builtin_audio_channel_num);
     VM_registerBuiltin(ctx, "audio_play_sound", builtin_audio_play_sound);
     VM_registerBuiltin(ctx, "audio_stop_sound", builtin_audio_stop_sound);
@@ -15806,6 +16582,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "audio_sound_get_gain", builtin_audio_sound_get_gain);
     VM_registerBuiltin(ctx, "audio_sound_get_pitch", builtin_audio_sound_get_pitch);
     VM_registerBuiltin(ctx, "audio_master_gain", builtin_audio_master_gain);
+    VM_registerBuiltin(ctx, "audio_set_master_gain", builtin_audio_set_master_gain);
     VM_registerBuiltin(ctx, "audio_group_load", builtin_audio_group_load);
     VM_registerBuiltin(ctx, "audio_group_is_loaded", builtin_audio_group_is_loaded);
     if (!isGMS2) {
@@ -16020,7 +16797,6 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "buffer_save_async", builtin_buffer_save_async);
     VM_registerBuiltin(ctx, "buffer_async_group_begin", builtin_buffer_async_group_begin);
     VM_registerBuiltin(ctx, "buffer_async_group_end", builtin_buffer_async_group_end);
-    VM_registerBuiltin(ctx, "filename_change_ext", builtin_filename_change_ext);
     VM_registerBuiltin(ctx, "buffer_base64_encode", builtin_buffer_base64_encode);
     VM_registerBuiltin(ctx, "buffer_base64_decode", builtin_buffer_base64_decode);
     VM_registerBuiltin(ctx, "base64_encode", builtin_base64_encode);
@@ -16030,6 +16806,10 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "buffer_get_surface", builtin_buffer_get_surface);
     VM_registerBuiltin(ctx, "sha1_file", builtin_sha1_file);
     VM_registerBuiltin(ctx, "md5_file", builtin_md5_file);
+
+    // Filename
+    VM_registerBuiltin(ctx, "filename_change_ext", builtin_filename_change_ext);
+    VM_registerBuiltin(ctx, "filename_name", builtin_filename_name);
 
     // PSN
     VM_registerBuiltin(ctx, "psn_init", builtin_psn_init);
@@ -16118,6 +16898,9 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "draw_get_color", builtin_draw_get_color);
     VM_registerBuiltin(ctx, "draw_get_alpha", builtin_draw_get_alpha);
     VM_registerBuiltin(ctx, "draw_get_font", builtin_draw_get_font);
+    VM_registerBuiltin(ctx, "draw_get_halign", builtin_draw_get_halign);
+    VM_registerBuiltin(ctx, "draw_get_valign", builtin_draw_get_valign);
+
 
     // Motion
     VM_registerBuiltin(ctx, "motion_add", builtin_motion_add);
@@ -16153,6 +16936,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "sprite_get_bbox_right", builtin_sprite_get_bbox_right);
     VM_registerBuiltin(ctx, "sprite_get_bbox_top", builtin_sprite_get_bbox_top);
     VM_registerBuiltin(ctx, "sprite_get_bbox_bottom", builtin_sprite_get_bbox_bottom);
+    VM_registerBuiltin(ctx, "sprite_set_bbox_mode", builtin_sprite_set_bbox_mode);
     VM_registerBuiltin(ctx, "sprite_set_offset", builtin_sprite_set_offset);
     VM_registerBuiltin(ctx, "sprite_create_from_surface", builtin_sprite_create_from_surface);
     VM_registerBuiltin(ctx, "sprite_delete", builtin_sprite_delete);
@@ -16210,7 +16994,9 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "place_free", builtin_place_free);
     VM_registerBuiltin(ctx, "place_empty", builtin_place_empty);
     if (isGMS2) {
+        VM_registerBuiltin(ctx, "collision_line_list", builtin_collision_line_list);
         VM_registerBuiltin(ctx, "collision_rectangle_list", builtin_collision_rectangle_list);
+        VM_registerBuiltin(ctx, "collision_circle_list", builtin_collision_circle_list);
         VM_registerBuiltin(ctx, "instance_place_list", builtin_instance_place_list);
     }
 
@@ -16272,6 +17058,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "layer_sprite_get_angle", builtin_layer_sprite_get_angle);
     VM_registerBuiltin(ctx, "layer_sprite_get_alpha", builtin_layer_sprite_get_alpha);
     VM_registerBuiltin(ctx, "layer_sprite_get_blend", builtin_layer_sprite_get_blend);
+    VM_registerBuiltin(ctx, "layer_sprite_speed", builtin_layer_sprite_speed);
+    VM_registerBuiltin(ctx, "layer_sprite_blend", builtin_layer_sprite_blend);
     VM_registerBuiltin(ctx, "layer_sprite_destroy", builtin_layer_sprite_destroy);
     VM_registerBuiltin(ctx, "layer_tile_visible", builtin_layer_tile_visible);
 #if IS_WAD17_OR_HIGHER_ENABLED
@@ -16282,6 +17070,10 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "tilemap_y", builtin_tilemap_y);
     VM_registerBuiltin(ctx, "tilemap_get_x", builtin_tilemap_get_x);
     VM_registerBuiltin(ctx, "tilemap_get_y", builtin_tilemap_get_y);
+	VM_registerBuiltin(ctx, "tilemap_get_width", builtin_tilemap_get_width);
+    VM_registerBuiltin(ctx, "tilemap_get_height", builtin_tilemap_get_height);
+	VM_registerBuiltin(ctx, "tilemap_get_tile_width", builtin_tilemap_get_tile_width);
+    VM_registerBuiltin(ctx, "tilemap_get_tile_height", builtin_tilemap_get_tile_height);
     VM_registerBuiltin(ctx, "tilemap_get", builtin_tilemap_get);
     VM_registerBuiltin(ctx, "tilemap_get_at_pixel", builtin_tilemap_get_at_pixel);
     VM_registerBuiltin(ctx, "tilemap_get_tileset", builtin_tilemap_get_tileset);
@@ -16290,13 +17082,17 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "tile_get_flip", builtin_tile_get_flip);
     VM_registerBuiltin(ctx, "tile_get_rotate", builtin_tile_get_rotate);
     VM_registerBuiltin(ctx, "tile_set_empty", builtin_tile_set_empty);
+    VM_registerBuiltin(ctx, "tilemap_set", builtin_tilemap_set);
     VM_registerBuiltin(ctx, "tilemap_set_at_pixel", builtin_tilemap_set_at_pixel);
 #endif
     VM_registerBuiltin(ctx, "layer_create", builtin_layer_create);
     VM_registerBuiltin(ctx, "layer_destroy", builtin_layer_destroy);
+    VM_registerBuiltin(ctx, "layer_script_begin", builtin_layer_script_begin);
+    VM_registerBuiltin(ctx, "layer_script_end", builtin_layer_script_end);
     VM_registerBuiltin(ctx, "layer_background_create", builtin_layer_background_create);
     VM_registerBuiltin(ctx, "layer_background_exists", builtin_layer_background_exists);
     VM_registerBuiltin(ctx, "layer_background_visible", builtin_layer_background_visible);
+    VM_registerBuiltin(ctx, "layer_background_speed", builtin_layer_background_speed);
     VM_registerBuiltin(ctx, "layer_background_htiled", builtin_layer_background_htiled);
     VM_registerBuiltin(ctx, "layer_background_vtiled", builtin_layer_background_vtiled);
     VM_registerBuiltin(ctx, "layer_background_xscale", builtin_layer_background_xscale);
@@ -16319,6 +17115,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "layer_tile_get_yscale", builtin_layer_tile_get_yscale);
     VM_registerBuiltin(ctx, "layer_tile_get_region", builtin_layer_tile_get_region);
     VM_registerBuiltin(ctx, "layer_background_destroy", builtin_layer_background_destroy);
+    VM_registerBuiltin(ctx, "layer_element_move", builtin_layer_element_move);
 
     // GMS2 internal
     VM_registerBuiltin(ctx, "@@NewGMLArray@@", builtin_NewGMLArray);
@@ -16464,14 +17261,20 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     }
     VM_registerBuiltin(ctx, "object_is_ancestor", builtin_object_is_ancestor);
     VM_registerBuiltin(ctx, "asset_get_index", builtin_asset_get_index);
+    VM_registerBuiltin(ctx, "gpu_get_blendmode", builtin_gpu_get_blendmode);
+    VM_registerBuiltin(ctx, "gpu_get_blendmode_ext", builtin_gpu_get_blendmode_ext);
+    VM_registerBuiltin(ctx, "gpu_get_blendmode_ext_sepalpha", builtin_gpu_get_blendmode_ext_sepalpha);
     VM_registerBuiltin(ctx,"gpu_set_blendmode", builtin_gpu_set_blendmode);
     VM_registerBuiltin(ctx,"gpu_set_blendmode_ext", builtin_gpu_set_blendmode_ext);
+    VM_registerBuiltin(ctx,"gpu_set_blendmode_ext_sepalpha", builtin_gpu_set_blendmode_ext_sepalpha);
     VM_registerBuiltin(ctx,"gpu_set_blendenable", builtin_gpu_set_blendenable);
     VM_registerBuiltin(ctx,"gpu_get_blendenable", builtin_gpu_get_blendenable);
     VM_registerBuiltin(ctx,"gpu_set_alphatestenable", builtin_gpu_set_alphatestenable);
     VM_registerBuiltin(ctx,"gpu_set_alphatestref", builtin_gpu_set_alphatestref);
     VM_registerBuiltin(ctx,"gpu_set_colorwriteenable", builtin_gpu_set_colorwriteenable);
+    VM_registerBuiltin(ctx,"gpu_set_colourwriteenable", builtin_gpu_set_colorwriteenable);
     VM_registerBuiltin(ctx,"gpu_get_colorwriteenable", builtin_gpu_get_colorwriteenable);
+    VM_registerBuiltin(ctx,"gpu_get_colourwriteenable", builtin_gpu_get_colorwriteenable);
     VM_registerBuiltin(ctx,"gpu_set_fog", builtin_gpu_set_fog);
     if (!isGMS2) {
         VM_registerBuiltin(ctx,"draw_set_blend_mode", builtin_gpu_set_blendmode);
@@ -16500,9 +17303,11 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "sprite_get_uvs", builtin_sprite_get_uvs);
     VM_registerBuiltin(ctx, "sprite_get_texture", builtin_sprite_get_texture);
     VM_registerBuiltin(ctx, "sprite_get_speed", builtin_sprite_get_speed);
+    VM_registerBuiltin(ctx, "sprite_get_speed_type", builtin_sprite_get_speed_type);
     VM_registerBuiltin(ctx, "font_get_uvs", builtin_font_get_uvs);
     VM_registerBuiltin(ctx, "texture_get_texel_width", builtin_texture_get_texel_width);
     VM_registerBuiltin(ctx, "texture_get_texel_height", builtin_texture_get_texel_height);
     VM_registerBuiltin(ctx, "texture_get_uvs", builtin_texture_get_uvs);
     VM_registerBuiltin(ctx, "texture_set_stage", builtin_texture_set_stage);
+    VM_registerBuiltin(ctx, "sprite_get_info", builtin_sprite_get_info);
 }

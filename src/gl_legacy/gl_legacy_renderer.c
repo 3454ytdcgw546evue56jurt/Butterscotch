@@ -43,6 +43,18 @@ extern GLint  gPalettedUPaletteVLoc;
 #include "image_decoder.h"
 #include "gl_common.h"
 
+// ===[ Runtime OpenGL extension checks ]===
+
+static bool hasFBO() {
+#ifdef PLATFORM_PS3
+    return true;
+#else
+    return (glGenFramebuffers || (glGenFramebuffersEXT && glBlitFramebufferEXT));
+#endif
+}
+
+#include "gl_wrappers.h"
+
 // ===[ Helpers ]===
 
 static void glApplyViewport(GLLegacyRenderer* gl, int32_t x, int32_t y, int32_t w, int32_t h) {
@@ -63,6 +75,11 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
     renderer->dataWin = dataWin;
 
+    if (!hasFBO()) {
+        fprintf(stderr, "GL: The legacy-gl renderer requires FBO support!\n");
+        abort();
+    }
+
     // Prepare texture slots for lazy loading (PNG decode deferred to first use)
     glEnable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
@@ -74,10 +91,10 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
 #else
     gl->textureCount = dataWin->txtr.count;
 #endif
-    gl->glTextures = safeMalloc(gl->textureCount * sizeof(GLuint));
-    gl->textureWidths = safeMalloc(gl->textureCount * sizeof(int32_t));
-    gl->textureHeights = safeMalloc(gl->textureCount * sizeof(int32_t));
-    gl->textureLoaded = safeMalloc(gl->textureCount * sizeof(bool));
+    gl->glTextures = (GLuint *)safeMalloc(gl->textureCount * sizeof(GLuint));
+    gl->textureWidths = (int32_t *)safeMalloc(gl->textureCount * sizeof(int32_t));
+    gl->textureHeights = (int32_t *)safeMalloc(gl->textureCount * sizeof(int32_t));
+    gl->textureLoaded = (bool *)safeMalloc(gl->textureCount * sizeof(bool));
 
     glGenTextures((GLsizei) gl->textureCount, gl->glTextures);
 
@@ -306,24 +323,29 @@ bool GLLegacyRenderer_ensureTextureLoaded(GLLegacyRenderer* gl, uint32_t pageId)
     DataWin* dw = gl->base.dataWin;
     Texture* txtr = &dw->txtr.textures[pageId];
 
+    DataWin_loadTxtrIfNeeded(dw, pageId);
+
     bool gm2022_5 = DataWin_isVersionAtLeast(dw, 2022, 5, 0, 0);
     uint8_t* pixels = ImageDecoder_decodeToRgba(txtr->blobData, (size_t) txtr->blobSize, gm2022_5, &w, &h);
     if (pixels == nullptr) {
         fprintf(stderr, "GL: Failed to decode TXTR page %u\n", pageId);
         return false;
     }
+    free(txtr->blobData);
+    txtr->blobData = nullptr;
 
     gl->textureWidths[pageId] = w;
     gl->textureHeights[pageId] = h;
 
     glBindTexture(GL_TEXTURE_2D, gl->glTextures[pageId]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    free(pixels);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    free(pixels);
 #endif
     fprintf(stderr, "GL: Loaded TXTR page %u (%dx%d)\n", pageId, w, h);
     return true;
@@ -1201,10 +1223,10 @@ static uint32_t findOrAllocTexturePageSlot(GLLegacyRenderer* gl) {
     // No free slot found, grow the arrays
     uint32_t newPageId = gl->textureCount;
     gl->textureCount++;
-    gl->glTextures = safeRealloc(gl->glTextures, gl->textureCount * sizeof(GLuint));
-    gl->textureWidths = safeRealloc(gl->textureWidths, gl->textureCount * sizeof(int32_t));
-    gl->textureHeights = safeRealloc(gl->textureHeights, gl->textureCount * sizeof(int32_t));
-    gl->textureLoaded = safeRealloc(gl->textureLoaded, gl->textureCount * sizeof(bool));
+    gl->glTextures = (GLuint *)safeRealloc(gl->glTextures, gl->textureCount * sizeof(GLuint));
+    gl->textureWidths = (int32_t *)safeRealloc(gl->textureWidths, gl->textureCount * sizeof(int32_t));
+    gl->textureHeights = (int32_t *)safeRealloc(gl->textureHeights, gl->textureCount * sizeof(int32_t));
+    gl->textureLoaded = (bool *)safeRealloc(gl->textureLoaded, gl->textureCount * sizeof(bool));
     gl->glTextures[newPageId] = 0;
     gl->textureWidths[newPageId] = 0;
     gl->textureHeights[newPageId] = 0;
@@ -1219,7 +1241,7 @@ static uint32_t findOrAllocTpagSlot(DataWin* dw, uint32_t originalTpagCount) {
     }
     uint32_t newIndex = dw->tpag.count;
     dw->tpag.count++;
-    dw->tpag.items = safeRealloc(dw->tpag.items, dw->tpag.count * sizeof(TexturePageItem));
+    dw->tpag.items = (TexturePageItem *)safeRealloc(dw->tpag.items, dw->tpag.count * sizeof(TexturePageItem));
     memset(&dw->tpag.items[newIndex], 0, sizeof(TexturePageItem));
     dw->tpag.items[newIndex].texturePageId = -1;
     return newIndex;
@@ -1238,7 +1260,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t surfaceID, 
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->surfaces[surfaceID]);
 
-    uint8_t* pixels = safeMalloc((size_t) w * (size_t) h * 4);
+    uint8_t* pixels = (uint8_t *)safeMalloc((size_t) w * (size_t) h * 4);
     if (pixels == nullptr)
         return -1;
 
@@ -1285,7 +1307,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t surfaceID, 
     sprite->originX = xorig;
     sprite->originY = yorig;
     sprite->textureCount = 1;
-    sprite->tpagIndices = safeMalloc(sizeof(int32_t));
+    sprite->tpagIndices = (int32_t *)safeMalloc(sizeof(int32_t));
     sprite->tpagIndices[0] = (int32_t) tpagIndex;
     sprite->maskCount = 0;
     sprite->masks = nullptr;
@@ -1334,13 +1356,48 @@ static void glDeleteSprite(Renderer* renderer, int32_t spriteIndex) {
     fprintf(stderr, "GL: Deleted sprite %d\n", spriteIndex);
 }
 
-static void glGpuSetBlendMode(MAYBE_UNUSED Renderer* renderer, int32_t mode) {
-    glBlendEquation(GLCommon_blendModeToEquation(mode));
-    glBlendFunc(GLCommon_blendModeToSFactor(mode), GLCommon_blendModeToDFactor(mode));
+static BlendFactors glGpuGetBlendFactors(Renderer* renderer) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*)renderer;
+    return (BlendFactors){
+        gl->currentSFactor, 
+        gl->currentDFactor, 
+        gl->currentSFactorAlpha, 
+        gl->currentDFactorAlpha
+    };
 }
 
-static void glGpuSetBlendModeExt(MAYBE_UNUSED Renderer* renderer, int32_t sfactor, int32_t dfactor) {
-    glBlendFunc(GLCommon_blendFactorToGL(sfactor), GLCommon_blendFactorToGL(dfactor));
+static int32_t glGpuGetBlendMode(Renderer* renderer) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    return gl->currentBlendMode;
+}
+
+static void glGpuSetBlendMode(Renderer* renderer, int32_t mode) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    
+    gl->currentBlendMode = mode;
+    gl->currentSFactor = GLCommon_blendModeToSFactor(mode);
+    gl->currentDFactor = GLCommon_blendModeToDFactor(mode);
+    gl->currentSFactorAlpha = gl->currentSFactor; 
+    gl->currentDFactorAlpha = gl->currentDFactor;
+    glBlendEquation(GLCommon_blendModeToEquation(mode));
+    glBlendFunc(gl->currentSFactor, gl->currentDFactor);
+}
+
+static void glGpuSetBlendModeExt(Renderer* renderer, int32_t sfactor, int32_t dfactor, int32_t sfactor_alpha, int32_t dfactor_alpha) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    
+    gl->currentBlendMode = bm_complex;
+    gl->currentSFactor = sfactor;
+    gl->currentDFactor = dfactor;
+    gl->currentSFactorAlpha = sfactor_alpha;
+    gl->currentDFactorAlpha = dfactor_alpha;
+    
+    glBlendFuncSeparate(
+        GLCommon_blendFactorToGL(sfactor), 
+        GLCommon_blendFactorToGL(dfactor), 
+        GLCommon_blendFactorToGL(sfactor_alpha), 
+        GLCommon_blendFactorToGL(dfactor_alpha)
+    );
 }
 
 static void glGpuSetBlendEnable(Renderer* renderer, bool enable) {
@@ -1693,7 +1750,7 @@ static RendererVtable glVtable;
 // ===[ Public API ]===
 
 Renderer* GLLegacyRenderer_create(void) {
-    GLLegacyRenderer* gl = safeCalloc(1, sizeof(GLLegacyRenderer));
+    GLLegacyRenderer* gl = (GLLegacyRenderer *)safeCalloc(1, sizeof(GLLegacyRenderer));
     gl->base.vtable = &glVtable;
     glVtable.init = glInit;
     glVtable.destroy = glDestroy;
@@ -1720,6 +1777,8 @@ Renderer* GLLegacyRenderer_create(void) {
     glVtable.clearScreen = glClearScreen;
     glVtable.createSpriteFromSurface = glCreateSpriteFromSurface;
     glVtable.deleteSprite = glDeleteSprite;
+    glVtable.gpuGetBlendFactors = glGpuGetBlendFactors;
+    glVtable.gpuGetBlendMode = glGpuGetBlendMode;
     glVtable.gpuSetBlendMode = glGpuSetBlendMode;
     glVtable.gpuSetBlendModeExt = glGpuSetBlendModeExt;
     glVtable.gpuSetBlendEnable = glGpuSetBlendEnable;

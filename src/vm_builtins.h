@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BS_VM_BUILTINS_H_
+#define _BS_VM_BUILTINS_H_
 
 #include "common.h"
 #include "vm.h"
@@ -195,6 +196,7 @@ typedef enum {
     // Constants
     BUILTIN_VAR_TRUE,
     BUILTIN_VAR_FALSE,
+    BUILTIN_VAR_INFINITY,
     BUILTIN_VAR_PI,
     BUILTIN_VAR_UNDEFINED,
 
@@ -275,3 +277,5 @@ int16_t VMBuiltins_resolveBuiltinVarId(const char* name);
 void VMBuiltins_checkIfBuiltinVarTableIsSorted(void);
 RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId, const char* name, int32_t arrayIndex);
 void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId, const char* name, RValue val, int32_t arrayIndex);
+
+#endif /* _BS_VM_BUILTINS_H_ */

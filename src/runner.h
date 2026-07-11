@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BS_RUNNER_H_
+#define _BS_RUNNER_H_
 
 #include "common.h"
 #include "audio_system.h"
@@ -243,6 +244,8 @@ typedef struct {
     float vSpeed;
     bool dynamic; // true = created at runtime via layer_create
     char* dynamicName; // owned
+    int32_t beginScript;
+    int32_t endScript;
     RuntimeLayerElement* elements; // stb_ds array
 } RuntimeLayer;
 
@@ -516,6 +519,7 @@ struct Runner {
     struct { char* key; int value; }* disabledObjects; // stb_ds string hashmap, nullptr = no filtering
     struct { int key; Instance* value; }* instancesById;
     bool forceDrawDepth;
+    bool applyOffsetForPrimitives;
     // Depth-sorted unified list of all drawables (instances + tiles + runtime layers) for the current room.
     // Active/visible filtering happens at draw time, so toggling those flags does not invalidate the cache.
     //
@@ -723,3 +727,5 @@ static inline void Runner_setActiveState(Runner* runner, Instance* instance, boo
 
     instance->active = active;
 }
+
+#endif /* _BS_RUNNER_H_ */
