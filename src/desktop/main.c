@@ -5,9 +5,9 @@
 
 #include "platformdefs.h"
 #include <getopt.h>
-#include <stdio.h>
+#include "stdio_compat.h"
 #include <stdlib.h>
-#include <string.h>
+#include "string_compat.h"
 #include <time.h>
 #include <signal.h>
 #ifdef _WIN32
@@ -248,6 +248,7 @@ typedef struct {
     bool lazyRooms;
     StringBooleanEntry* eagerRooms; // stb_ds string-keyed set of room names
     bool lazyTextures;
+    bool lazyAudio;
     DataWinLoadType loadType;
     int profilerFramesBetween; // 0 = disabled
 #ifdef ENABLE_VM_OPCODE_PROFILER
@@ -345,20 +346,6 @@ static void resolveWindowSize(const CommandLineArgs* args, uint32_t gen8Width, u
     }
 }
 
-#ifdef NO_STRTOK_R
-
-static char *strtok_r(char *s, const char *sep, char **p) {
-    if (!s && !(s = *p)) return NULL;
-    s += strspn(s, sep);
-    if (!*s) return *p = 0;
-    *p = s + strcspn(s, sep);
-    if (**p) *(*p)++ = 0;
-    else *p = 0;
-    return s;
-}
-
-#endif
-
 // Extracts the Runner arguments from a string, returning the values on stb_ds array
 // The "Runner arguments" is used for the "--game-args" and for the game_change GML function
 // Returns the modified array
@@ -434,6 +421,7 @@ static void printUsage(const char *argv0) {
         "    --save-folder <directory>              - Set the directory will save files will be stored\n"
         "    --game-args <args>                     - Arguments to pass to the game\n"
         "    --lazy-textures                        - Load textures into VRAM on first use, improving startup times\n"
+        "    --lazy-audio                           - Load audio into RAM on first use, reducing memory usage\n"
         "    --load-type <type>                     - Specify how data.win is loaded, per-chunk or all at once\n"
 #ifdef EABLE_VM_OPCODE_PROFILER
         "    --profile-opcodes                      - Rank which GML opcodes were executed the most\n"
@@ -493,6 +481,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"save-folder", required_argument, nullptr, 'B'},
         {"game-args", required_argument, nullptr, 'N'},
         {"lazy-textures", no_argument, nullptr, 'L'},
+        {"lazy-audio", no_argument, nullptr, 'K'},
         {"load-type", required_argument, nullptr, 999},
 #ifdef ENABLE_VM_OPCODE_PROFILER
         {"profile-opcodes", no_argument, nullptr, 'Q'},
@@ -587,6 +576,9 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                 break;
             case 'L':
                 args->lazyTextures = true;
+                break;
+            case 'K':
+                args->lazyAudio = true;
                 break;
             case 'e':
                 shput(args->eventsToBeTraced, optarg, true);
@@ -1016,6 +1008,8 @@ int main(int argc, char* argv[]) {
     bool platformInitialized = false;
     int32_t inputFrameCount = 0;
 
+    bool fastForwardActive = false;
+    bool fastForwardTabPrev = false;
     while (true) {
         fprintf(stderr, "Loading %s...\n", args.dataWinPath);
 
@@ -1050,6 +1044,7 @@ int main(int argc, char* argv[]) {
         options.loadType = args.loadType;
         options.lazyLoadRooms = args.lazyRooms;
         options.lazyLoadTextures = args.lazyTextures;
+        options.lazyLoadAudio = args.lazyAudio;
         options.eagerlyLoadedRooms = args.eagerRooms;
         DataWin* dataWin = DataWin_parse(currentDataWinPath, options);
 
@@ -1152,6 +1147,7 @@ int main(int argc, char* argv[]) {
                 printf("  Visible: %d\n", obj->visible);
                 printf("  Depth: %d\n", obj->depth);
                 printf("  Events (%u):\n", totalEvents);
+                {
                 repeat(OBJT_EVENT_TYPE_COUNT, e) {
                     ObjectEventList* list = &obj->eventLists[e];
                     repeat(list->eventCount, eIdx) {
@@ -1164,6 +1160,7 @@ int main(int argc, char* argv[]) {
                         printf("      Code ID: %d\n", codeId);
                         printf("      Actions: %u\n", event->actionCount);
                     }
+                }
                 }
             }
             VM_free(vm);
@@ -1486,7 +1483,7 @@ int main(int argc, char* argv[]) {
             }
 
             uint64_t frameStartNow = nowNanos();
-            runner->deltaTime = (frameStartNow - lastFrameStartTime) / 1000;
+            runner->deltaTime = (int64_t)(frameStartNow - lastFrameStartTime) / 1000.0;
             lastFrameStartTime = frameStartNow;
 
             // Clear last frame's pressed/released state, then poll new input events
@@ -1781,7 +1778,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (shouldStep && args.traceFrames) {
-                    double frameElapsedMs = (nowNanos() - frameStartTime) / 1000000.0;
+                    double frameElapsedMs = (int64_t)(nowNanos() - frameStartTime) / 1000000.0;
                     fprintf(stderr, "Frame %d (End, %.2f ms)\n", runner->frameCount, frameElapsedMs);
                 }
 
@@ -1801,8 +1798,6 @@ int main(int argc, char* argv[]) {
 
             // Limit frame rate to room speed (skip in headless mode for max speed!!)
             if (!args.headless && runner->currentRoom->speed > 0) {
-                static bool fastForwardActive = false;
-                static bool fastForwardTabPrev = false;
                 bool fastForwardTabNow = RunnerKeyboard_checkPressed(runner->keyboard, VK_TAB);
                 if (args.fastForwardSpeed > 0.0 && fastForwardTabNow && !fastForwardTabPrev) {
                     fastForwardActive = !fastForwardActive;
@@ -1890,8 +1885,10 @@ int main(int argc, char* argv[]) {
                     free(newArguments[i]);
                 }
                 arrfree(newArguments);
+                {
                 repeat(arrlen(currentGameArgs), i) {
                     free(currentGameArgs[i]);
+                }
                 }
                 arrfree(currentGameArgs);
                 return 1;

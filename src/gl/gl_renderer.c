@@ -7,9 +7,9 @@
 #else
 #include <glad/glad.h>
 #endif
-#include <stdio.h>
+#include "stdio_compat.h"
 #include <stdlib.h>
-#include <string.h>
+#include "string_compat.h"
 #include "math_compat.h"
 
 #include "stb_image.h"
@@ -274,14 +274,14 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     gl->isGL3 = (ver.major >= 3);
     gl->isGLES = ver.isGLES;
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    gl_init_wrappers();
+#endif
+
     if (!hasFBO()) {
         fprintf(stderr, "GL: The modern-gl renderer requires FBO support\n");
         abort();
     }
-
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-    gl_init_wrappers();
-#endif
 
     char vertSrc[1024];
     char fragSrc[1024];
@@ -2337,12 +2337,12 @@ static void glDeleteSprite(Renderer* renderer, int32_t spriteIndex) {
 
 static BlendFactors glGpuGetBlendFactors(Renderer* renderer) {
     GLRenderer* gl = (GLRenderer*)renderer;
-    return (BlendFactors){
-        gl->currentSFactor, 
-        gl->currentDFactor, 
-        gl->currentSFactorAlpha, 
-        gl->currentDFactorAlpha
-    };
+    BlendFactors ret;
+    ret.src = gl->currentSFactor;
+    ret.dst = gl->currentDFactor;
+    ret.srcAlpha = gl->currentSFactorAlpha;
+    ret.dstAlpha = gl->currentDFactorAlpha;
+    return ret;
 }
 
 static int32_t glGpuGetBlendMode(Renderer* renderer) {

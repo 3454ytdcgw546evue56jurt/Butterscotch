@@ -2,9 +2,9 @@
 #include "binary_reader.h"
 
 #include <stdbool.h>
-#include <stdio.h>
+#include "stdio_compat.h"
 #include <stdlib.h>
-#include <string.h>
+#include "string_compat.h"
 #include "math_compat.h"
 
 #include "stb_ds.h"
@@ -237,6 +237,7 @@ void GamePath_computeInternal(GamePath* path) {
 // Get interpolated position at t in [0,1] (yyPath.js:362-409)
 PathPositionResult GamePath_getPosition(GamePath* path, float t) {
     PathPositionResult result = {0};
+    result.speed = 100.0f;
 
     if (path->internalPointCount == 0) return result;
 
@@ -1300,7 +1301,14 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
         font->present = true;
         font->name = readStringPtr(reader, dw);
         font->displayName = readStringPtr(reader, dw);
-        font->emSize = BinaryReader_readUint32(reader);
+        uint32_t rawEmSize = BinaryReader_readUint32(reader);
+        if (rawEmSize & (1u << 31)) {
+            float negated;
+            memcpy(&negated, &rawEmSize, sizeof(negated));
+            font->emSize = -negated;
+        } else {
+            font->emSize = (float) rawEmSize;
+        }
         font->bold = BinaryReader_readBool32(reader);
         font->italic = BinaryReader_readBool32(reader);
         font->rangeStart = BinaryReader_readUint16(reader);
@@ -1418,9 +1426,11 @@ static void parseTMLN(BinaryReader* reader, DataWin* dw) {
             }
 
             // Pass 2: Parse event action lists
+            {
             repeat(tl->momentCount, j) {
                 BinaryReader_seek(reader, eventPtrs[j]);
                 tl->moments[j].actions = readEventActions(reader, dw, &tl->moments[j].actionCount);
+            }
             }
             free(eventPtrs);
         } else {
@@ -1551,9 +1561,11 @@ static void parseOBJT(BinaryReader* reader, DataWin* dw) {
         }
 
         // Zero-fill any unused event type slots
+        {
         for (uint32_t eventType = eventTypeCount; OBJT_EVENT_TYPE_COUNT > eventType; eventType++) {
             obj->eventLists[eventType].eventCount = 0;
             obj->eventLists[eventType].events = nullptr;
+        }
         }
 
         free(eventTypePtrs);
@@ -1585,8 +1597,10 @@ static void readRoomBackgrounds(BinaryReader* reader, Room* room) {
         bg->speedY = BinaryReader_readInt32(reader);
         bg->stretch = BinaryReader_readBool32(reader);
     }
+    {
     for (uint32_t j = fillEnd; 8 > j; j++) {
         memset(&room->backgrounds[j], 0, sizeof(RoomBackground));
+    }
     }
     free(bgPtrs);
 }
@@ -1613,8 +1627,10 @@ static void readRoomViews(BinaryReader* reader, Room* room) {
         view->speedY = BinaryReader_readInt32(reader);
         view->objectId = BinaryReader_readInt32(reader);
     }
+    {
     for (uint32_t j = viewCount; 8 > j; j++) {
         memset(&room->views[j], 0, sizeof(RoomView));
+    }
     }
     free(viewPtrsArr);
 }
@@ -2023,6 +2039,91 @@ static void parseROOM(BinaryReader* reader, DataWin* dw, bool lazyLoadRooms, Str
         }
     }
 
+    // Detect RLE-compressed tile data (Added in GMS 2024.2)
+    if (DataWin_isVersionAtLeast(dw, 2023, 2, 0, 0) && !DataWin_isVersionAtLeast(dw, 2024, 2, 0, 0)) {
+        // Iterate over rooms to find tile layers
+        repeat(count, i) {
+            if (ptrs[i] == 0) continue;
+
+            BinaryReader_seek(reader, ptrs[i]);
+            BinaryReader_skip(reader, 22 * 4); // Skip to layersPtr
+
+            uint32_t layersPtr = BinaryReader_readUint32(reader);
+            uint32_t seqnPtr = BinaryReader_readUint32(reader);
+
+            BinaryReader_seek(reader, layersPtr);
+            uint32_t layerCount = BinaryReader_readUint32(reader);
+            if (layerCount <= 0) continue;
+
+            bool found2024_2 = false;
+
+            for (uint32_t layerNum = 0; layerNum < layerCount; layerNum++) {
+                size_t layerPtr = (size_t)(layersPtr + 4 + (4 * layerNum));
+                BinaryReader_seek(reader, layerPtr + 4);
+
+                uint32_t jumpOffset = BinaryReader_readUint32(reader) + 8;
+                uint32_t nextOffset = (layerNum == layerCount - 1) ? seqnPtr : BinaryReader_readUint32(reader);
+
+                BinaryReader_seek(reader, jumpOffset);
+                uint32_t layerType = BinaryReader_readUint32(reader);
+
+                if (layerType != RoomLayerType_Tiles) continue;
+
+                // Skip to tile map dimensions
+                BinaryReader_skip(reader, 32);
+                uint32_t effectCount = BinaryReader_readUint32(reader);
+                BinaryReader_skip(reader, effectCount * 12 + 4);
+
+                uint32_t tileMapWidth = BinaryReader_readUint32(reader);
+                uint32_t tileMapHeight = BinaryReader_readUint32(reader);
+                uint32_t expectedRawSize = tileMapWidth * tileMapHeight * 4;
+                uint32_t actualRemaining = nextOffset - (uint32_t)BinaryReader_getPosition(reader);
+
+                // If sizes don't match, it's RLE compressed -> 2024.2+
+                if (actualRemaining != expectedRawSize) {
+                    DataWin_bumpVersionTo(dw, 2024, 2, 0, 0);
+                    found2024_2 = true;
+                    break;
+                }
+            }
+
+            if (found2024_2) break;
+        }
+    }
+
+    // Detect alignment after the stream of said RLE data (Added in GMS 2024.4)
+    if (DataWin_isVersionAtLeast(dw, 2024, 2, 0, 0) && !DataWin_isVersionAtLeast(dw, 2024, 4, 0, 0)) {
+        bool hasNonAlignedLayer = false;
+
+        repeat(count, i) {
+            if (ptrs[i] == 0) continue;
+
+            BinaryReader_seek(reader, ptrs[i]);
+            BinaryReader_skip(reader, 22 * 4);
+
+            uint32_t layersPtr = BinaryReader_readUint32(reader);
+
+            BinaryReader_seek(reader, layersPtr);
+            uint32_t layerCount = BinaryReader_readUint32(reader);
+            if (layerCount <= 0) continue;
+
+            for (uint32_t layerNum = 0; layerNum < layerCount; layerNum++) {
+                size_t layerPtr = (size_t)(layersPtr + 4 + (4 * layerNum));
+                if (layerPtr % 4 != 0) {
+                    hasNonAlignedLayer = true;
+                    break;
+                }
+            }
+
+            if (hasNonAlignedLayer) break;
+        }
+
+        // If no non-aligned layers found, it's 2024.4+
+        if (!hasNonAlignedLayer) {
+            DataWin_bumpVersionTo(dw, 2024, 4, 0, 0);
+        }
+    }
+
     rc->rooms = (Room *)safeCalloc(count, sizeof(Room));
     repeat(count, i) {
         if (ptrs[i] == 0) { rc->rooms[i].creationCodeId = -1; continue; }
@@ -2169,13 +2270,17 @@ static void resolveAllTPAGReferences(BinaryReader* reader, DataWin* dw, uint32_t
             spr->tpagIndices[j] = findTPAGIndexByOffset(reader, dw, ptrs, count, (uint32_t) spr->tpagIndices[j]);
         }
     }
+    {
     repeat(dw->bgnd.count, i) {
         Background* bg = &dw->bgnd.backgrounds[i];
         bg->tpagIndex = findTPAGIndexByOffset(reader, dw, ptrs, count, (uint32_t) bg->tpagIndex);
     }
+    }
+    {
     repeat(dw->font.count, i) {
         Font* fnt = &dw->font.fonts[i];
         fnt->tpagIndex = findTPAGIndexByOffset(reader, dw, ptrs, count, (uint32_t) fnt->tpagIndex);
+    }
     }
 }
 
@@ -2265,11 +2370,13 @@ static void parseCODE(BinaryReader* reader, DataWin* dw, uint32_t chunkLength, s
     // The bytecode blob starts at the minimum bytecodeAbsoluteOffset and
     // extends to the end of the CODE chunk.
     uint32_t blobStart = UINT32_MAX;
+    {
     repeat(codeCount, i) {
         if (!c->entries[i].present) continue;
         if (blobStart > c->entries[i].bytecodeAbsoluteOffset) {
             blobStart = c->entries[i].bytecodeAbsoluteOffset;
         }
+    }
     }
     if (blobStart == UINT32_MAX) blobStart = (uint32_t) chunkDataStart;
     size_t blobSize = chunkEnd - blobStart;
@@ -2499,6 +2606,7 @@ static void parseTXTR(BinaryReader* reader, DataWin* dw, size_t chunkEnd, bool l
     free(ptrs);
 
     // Compute blob sizes from successive offsets
+    {
     repeat(count, i) {
         if (t->textures[i].blobOffset == 0) {
             t->textures[i].blobSize = 0; // external texture
@@ -2509,6 +2617,7 @@ static void parseTXTR(BinaryReader* reader, DataWin* dw, size_t chunkEnd, bool l
         } else {
             t->textures[i].blobSize = (uint32_t)(chunkEnd - t->textures[i].blobOffset);
         }
+    }
     }
 
     // Load blob data into owned buffers
@@ -2549,7 +2658,7 @@ void DataWin_loadTxtrIfNeeded(DataWin* dw, uint32_t textureId) {
     }
 }
 
-static void parseAUDO(BinaryReader* reader, DataWin* dw) {
+static void parseAUDO(BinaryReader* reader, DataWin* dw, bool loadAudioDataLazily) {
     Audo* a = &dw->audo;
 
     uint32_t count;
@@ -2566,7 +2675,9 @@ static void parseAUDO(BinaryReader* reader, DataWin* dw) {
         a->entries[i].dataSize = BinaryReader_readUint32(reader);
         a->entries[i].dataOffset = (uint32_t)BinaryReader_getPosition(reader);
         // Load audio data into owned buffer
-        if (dw->mappedFile) {
+        if (loadAudioDataLazily) {
+            a->entries[i].data = nullptr;
+        } else if (dw->mappedFile) {
             a->entries[i].data = dw->mappedFile + a->entries[i].dataOffset;
         } else if (a->entries[i].dataSize > 0) {
             a->entries[i].data = (uint8_t *)safeMalloc(a->entries[i].dataSize);
@@ -2576,6 +2687,31 @@ static void parseAUDO(BinaryReader* reader, DataWin* dw) {
         }
     }
     free(ptrs);
+}
+
+void DataWin_loadAudoIfNeeded(DataWin* dw, uint32_t audioEntryId) {
+    Audo* a = &dw->audo;
+    AudioEntry* entry = &a->entries[audioEntryId];
+
+    if (!entry->present || entry->dataSize == 0) return;
+    if (entry->data != nullptr) return;
+
+    if (!dw->lazyLoadFile) {
+        fprintf(stderr, "loadAudoIfNeeded: called without a lazy load file.\n");
+        return;
+    }
+
+    entry->data = (uint8_t *)safeMalloc(entry->dataSize);
+
+    memset(entry->data, 0, entry->dataSize);
+    long old_seek = ftell(dw->lazyLoadFile);
+    fseek(dw->lazyLoadFile, entry->dataOffset, SEEK_SET);
+    size_t read = fread(entry->data, 1, entry->dataSize, dw->lazyLoadFile);
+    fseek(dw->lazyLoadFile, old_seek, SEEK_SET);
+
+    if (read != entry->dataSize) {
+        fprintf(stderr, "loadAudoIfNeeded: couldn't read %u bytes to load audio entry %u.\n", entry->dataSize, audioEntryId);
+    }
 }
 
 // ===[ MAIN PARSE FUNCTION ]===
@@ -2818,7 +2954,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         } else if (options.parseTxtr && memcmp(chunkName, "TXTR", 4) == 0) {
             parseTXTR(&reader, dw, chunkEnd, options.lazyLoadTextures);
         } else if (options.parseAudo && memcmp(chunkName, "AUDO", 4) == 0) {
-            parseAUDO(&reader, dw);
+            parseAUDO(&reader, dw, options.lazyLoadAudio);
         } else {
             printf("Unknown chunk: %.4s (length %u at offset 0x%zX)\n", chunkName, chunkLength, chunkDataStart - 8);
         }
@@ -2850,7 +2986,8 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
     // If lazy-loading rooms, keep the file handle open for DataWin_loadRoomPayload, otherwise close it now
     dw->lazyLoadRooms = options.lazyLoadRooms;
     dw->lazyLoadTextures = options.lazyLoadTextures;
-    if (options.lazyLoadRooms || options.lazyLoadTextures) {
+    dw->lazyLoadAudio = options.lazyLoadAudio;
+    if (options.lazyLoadRooms || options.lazyLoadTextures || options.lazyLoadAudio) {
         dw->lazyLoadFile = file;
         dw->lazyLoadFilePath = safeStrdup(filePath);
         dw->fileSize = (size_t) fileSize;
