@@ -5356,7 +5356,7 @@ static RValue builtin_ds_grid_height(VMContext* ctx, MAYBE_UNUSED RValue* args, 
 }
 
 static RValue builtin_ds_grid_set(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    REQUIRE_ARGC_AT_MOST("ds_grid_set", 3, RValue_makeUndefined());
+    REQUIRE_ARGC_AT_MOST("ds_grid_set", 4, RValue_makeUndefined());
 
     DsGrid* grid = dsGridGet(ctx->runner, RValue_toInt32(args[0]));
     if (grid == nullptr) return RValue_makeUndefined();
