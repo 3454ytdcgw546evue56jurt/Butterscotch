@@ -77,6 +77,47 @@ GLVer GLCommon_getGLVersion(void);
 
 #endif
 
+// Utils
+
+static inline uint8_t floatToUnormByte(float v) {
+    if (v <= 0.0f) return 0;
+    if (v >= 1.0f) return 255;
+    return (uint8_t)(v * 255.0f + 0.5f);
+}
+
+// Primitives and vertices
+
+typedef struct {
+    float x, y, z;
+    float u, v;
+    uint8_t r, g, b, a;
+} GlVertex;
+
+typedef struct {
+    int32_t type;
+    int32_t vertexCount;
+    GLuint textureId;
+    bool hasTexture;
+} GlPrimitive;
+
+void GlPrimitive_reset(GlPrimitive* primitive);
+
+void GLCommon_primitiveBegin(GlPrimitive* primitive, int32_t type, int32_t textureId);
+void GLCommon_primitiveBeginTexture(
+    GlPrimitive* primitive, int32_t primitiveType,
+    GLuint whiteTexture, GLuint resolvedTexture
+);
+bool GLCommon_primitivePrepare(
+    GlPrimitive* primitive, GLuint whiteTexture,
+    GLenum* mode, GLuint* textureId
+);
+void GLCommon_drawVertex(
+    GlVertex* vertex,
+    float x, float y, float z,
+    uint32_t color, float alpha,
+    float u, float v
+);
+
 // ===[ Debug UI font (drawTextUI) ]===
 
 // Embedded debug-font state backing drawTextUI. Embedded in each GL renderer
