@@ -967,19 +967,8 @@ static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32
 
     modernGl->batchCount = 0;
     modernGl->currentTextureId = 0;
-    gl->windowW = windowW;
-    gl->windowH = windowH;
-    gl->gameW = gameW;
-    gl->gameH = gameH;
-
-    // Bind the application_surface
-    int32_t appId = gl->base.runner->applicationSurfaceId;
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[appId]);
-    glViewport(0, 0, gameW, gameH);
-    gl->base.CPortX = 0;
-    gl->base.CPortY = 0;
-    gl->base.CPortW = gameW;
-    gl->base.CPortH = gameH;
+    
+    GLCommon_beginFrame(gl, gameW, gameH, windowW, windowH);
 }
 
 static void glBeginView(Renderer* renderer, MAYBE_UNUSED int32_t viewX, MAYBE_UNUSED int32_t viewY, MAYBE_UNUSED int32_t viewW, MAYBE_UNUSED int32_t viewH, int32_t portX, int32_t portY, int32_t portW, int32_t portH, MAYBE_UNUSED float viewAngle) {

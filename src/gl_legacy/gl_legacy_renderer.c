@@ -251,20 +251,7 @@ static void glDestroy(Renderer* renderer) {
 
 static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH) {
     GLRenderer* gl = (GLRenderer*) renderer;
-
-    gl->windowW = windowW;
-    gl->windowH = windowH;
-    gl->gameW = gameW;
-    gl->gameH = gameH;
-
-    // Bind the application_surface (sized/created by Runner_beginFrame's ensureApplicationSurface call right before this).
-    int32_t appId = gl->base.runner->applicationSurfaceId;
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[appId]);
-    glViewport(0, 0, gameW, gameH);
-    gl->base.CPortX = 0;
-    gl->base.CPortY = 0;
-    gl->base.CPortW = gameW;
-    gl->base.CPortH = gameH;
+    GLCommon_beginFrame(gl, gameW, gameH, windowW, windowH);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 

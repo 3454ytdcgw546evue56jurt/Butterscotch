@@ -8,6 +8,22 @@
 #include "utils.h"
 #include "renderer.h" // for bm_* constants
 
+void GLCommon_beginFrame(GLRenderer* gl,  int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH) {
+    gl->gameW = gameW;
+    gl->gameH = gameH;
+    gl->windowW = windowW;
+    gl->windowH = windowH;
+
+    // Bind the application surface
+    int32_t appId = gl->base.runner->applicationSurfaceId;
+    glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[appId]);
+    glViewport(0, 0, gameW, gameH);
+    gl->base.CPortX = 0;
+    gl->base.CPortY = 0;
+    gl->base.CPortW = gameW;
+    gl->base.CPortH = gameH;
+}
+
 // ===[ Letterbox blit ]===
 
 void GLCommon_computeLetterbox(int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH, int32_t* outStartX, int32_t* outStartY, int32_t* outEndX, int32_t* outEndY) {
