@@ -3394,9 +3394,11 @@ static RendererVtable glVtable;
 Renderer* GLRenderer_create(void) {
     GLModernRenderer* modernGl = (GLModernRenderer *)safeCalloc(1, sizeof(GLModernRenderer));
     GLRenderer* gl = &modernGl->base;
+    gl->glMode = GL_MODE_MODERN;
+    
     Renderer* base = &gl->base;
-
     base->vtable = &glVtable;
+    
     glVtable.init = glInit;
     glVtable.destroy = glDestroy;
     glVtable.beginFrame = glBeginFrame;

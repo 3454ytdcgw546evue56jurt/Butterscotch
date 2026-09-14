@@ -2321,9 +2321,11 @@ static RendererVtable glVtable;
 Renderer* GLLegacyRenderer_create(void) {
     GLLegacyRenderer* legacyGl = (GLLegacyRenderer *)safeCalloc(1, sizeof(GLLegacyRenderer));
     GLRenderer* gl = &legacyGl->base;
-    Renderer* base = &gl->base;
+    gl->glMode = GL_MODE_LEGACY;
 
+    Renderer* base = &gl->base;
     base->vtable = &glVtable;
+
     glVtable.init = glInit;
     glVtable.destroy = glDestroy;
     glVtable.beginFrame = glBeginFrame;
@@ -2397,6 +2399,7 @@ Renderer* GLLegacyRenderer_create(void) {
     glVtable.shaderSetUniformI = glShaderSetUniformI;
     glVtable.shaderIsCompiled = glShaderIsCompiled;
     glVtable.shadersSupported = glShadersSupported;
+    
     base->drawColor = 0xFFFFFF; // white (BGR)
     base->drawAlpha = 1.0f;
     base->drawFont = -1;
