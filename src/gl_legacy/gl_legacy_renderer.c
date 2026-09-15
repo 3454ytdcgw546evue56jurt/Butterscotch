@@ -93,19 +93,6 @@ static bool hasFBO() {
 #endif
 }
 
-// ===[ Helpers ]===
-
-static void glApplyViewport(GLRenderer* gl, int32_t x, int32_t y, int32_t w, int32_t h) {
-    glViewport(x, y, w, h);
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(x, y, w, h);
-
-    gl->base.CPortX = x;
-    gl->base.CPortY = y;
-    gl->base.CPortW = w;
-    gl->base.CPortH = h;
-}
-
 // camera_apply: swap the active world->clip projection on the current target without touching its viewport.
 static void glApplyProjection(Renderer* renderer, const Matrix4f* viewMatrix, const Matrix4f* projectionMatrix) {
     Renderer_applyProjection(renderer, viewMatrix, projectionMatrix);
@@ -128,21 +115,14 @@ static void glApplyProjection(Renderer* renderer, const Matrix4f* viewMatrix, co
 static void glInit(Renderer* renderer, DataWin* dataWin) {
     GLRenderer* gl = (GLRenderer*) renderer;
     GLLegacyRenderer* legacyGl = (GLLegacyRenderer*) renderer;
-
     renderer->dataWin = dataWin;
-
-    Matrix4f world;
-    Matrix4f_identity(&world);
-    renderer->gmlMatrices[MATRIX_WORLD] = world;
-
-#if !defined(PLATFORM_PS3) && !defined(PLATFORM_VITA)
-    gl_init_wrappers();
-#endif
 
     if (!hasFBO()) {
         logError("GL: The legacy-gl renderer requires FBO support!\n");
         abort();
     }
+
+    GLCommon_init(renderer);
 
     // GL 2.0+ has NPOT textures as core; older GL (1.x) may or may not have
     // GL_ARB_texture_non_power_of_two. Only round up to power-of-two on GPUs
@@ -161,60 +141,10 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     glDisable(GL_DEPTH_TEST);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-#ifdef PLATFORM_PS3
-    // TXTR is empty on PS3; page count comes from TEXTURES.BIN.
-    gl->textureCount = PS3Textures_getPageCount();
-#elif defined(PLATFORM_VITA)
-    if (VitaTextures_Active())
-        gl->textureCount = VitaTextures_GetPageCount();
-    else
-        gl->textureCount = dataWin->txtr.count;
-#else
-    gl->textureCount = dataWin->txtr.count;
-#endif
-
-    GlPrimitive_reset(&gl->currentPrimitive);
     gl->vertexData = nullptr;
     legacyGl->primitiveCapacity = 0;
 
-    gl->glTextures = (GLuint *)safeMalloc(gl->textureCount * sizeof(GLuint));
-    gl->textureWidths = (int32_t *)safeMalloc(gl->textureCount * sizeof(int32_t));
-    gl->textureHeights = (int32_t *)safeMalloc(gl->textureCount * sizeof(int32_t));
-    gl->textureLoaded = (bool *)safeMalloc(gl->textureCount * sizeof(bool));
-
-    glGenTextures((GLsizei) gl->textureCount, gl->glTextures);
-
-    for (uint32_t i = 0; gl->textureCount > i; i++) {
-        gl->textureWidths[i] = 0;
-        gl->textureHeights[i] = 0;
-        gl->textureLoaded[i] = false;
-    }
-
-    // Create 1x1 white pixel texture for primitive drawing (rectangles, lines, etc.)
-    glGenTextures(1, &gl->whiteTexture);
-    glBindTexture(GL_TEXTURE_2D, gl->whiteTexture);
-    uint8_t whitePixel[4] = {255, 255, 255, 255};
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    // Enable blending
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Save original counts so we know which slots are from data.win vs dynamic
-    gl->originalTexturePageCount = gl->textureCount;
-    gl->originalTpagCount = dataWin->tpag.count;
-    gl->originalSpriteCount = dataWin->sprt.count;
-
-    // application_surface is allocated lazily by glLegacyEnsureApplicationSurface as a normal entry in the surface table.
-    gl->surfaces = nullptr;
-    gl->surfaceTexture = nullptr;
-    gl->surfaceWidth = nullptr;
-    gl->surfaceHeight = nullptr;
-    gl->surfaceCount = 0;
 
     logInfo("GL: Renderer initialized (%u texture pages)\n", gl->textureCount);
 }
@@ -223,30 +153,10 @@ static void glDestroy(Renderer* renderer) {
     GLRenderer* gl = (GLRenderer*) renderer;
     GLLegacyRenderer* legacyGl = (GLLegacyRenderer*) renderer;
 
-    free(gl->vertexData);
     gl->vertexData = nullptr;
     legacyGl->primitiveCapacity = 0;
-    
-    GlPrimitive_reset(&gl->currentPrimitive);
 
-    glDeleteTextures(1, &gl->whiteTexture);
-    GLCommon_deleteDebugFontTexture(&gl->debugUI);
-
-    glDeleteTextures((GLsizei) gl->textureCount, gl->glTextures);
-
-    for (uint32_t i = 0; gl->surfaceCount > i; i++) {
-        if (gl->surfaceTexture[i] != 0) glDeleteTextures(1, &gl->surfaceTexture[i]);
-        if (gl->surfaces[i] != 0) glDeleteFramebuffers(1, &gl->surfaces[i]);
-    }
-    free(gl->surfaces);
-    free(gl->surfaceTexture);
-    free(gl->surfaceWidth);
-    free(gl->surfaceHeight);
-
-    free(gl->glTextures);
-    free(gl->textureWidths);
-    free(gl->textureHeights);
-    free(gl);
+    GLCommon_destroy(renderer);
 }
 
 static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH) {
@@ -256,26 +166,8 @@ static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32
 }
 
 static void glBeginView(Renderer* renderer, MAYBE_UNUSED int32_t viewX, MAYBE_UNUSED int32_t viewY, MAYBE_UNUSED int32_t viewW, MAYBE_UNUSED int32_t viewH, int32_t portX, int32_t portY, int32_t portW, int32_t portH, MAYBE_UNUSED float viewAngle) {
-    GLRenderer* gl = (GLRenderer*) renderer;
-
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Set viewport and scissor to the port rectangle within the FBO
-    // FBO uses game resolution, port coordinates are in game space
-    // OpenGL viewport Y is bottom-up, game Y is top-down
-    glApplyViewport(gl, portX, portY, portW, portH);
-
-    int32_t viewCurrent = 0;
-    if (renderer->runner->viewsEnabled) {
-    viewCurrent = renderer->runner->viewCurrent;
-    }
-    RuntimeView* view = &renderer->runner->views[viewCurrent];
-    gl->base.cameraCurrent = view->cameraId;
-    GMLCamera* camera = Runner_getCameraById(renderer->runner, gl->base.cameraCurrent);
-    glApplyProjection(renderer,&camera->viewMatrix,&camera->projectionMatrix);
-
-    glActiveTexture(GL_TEXTURE0);
-
+    GLCommon_beginView(renderer, portX, portY, portW, portH, GL_TEXTURE0, glApplyProjection);
 }
 
 static void glEndView(MAYBE_UNUSED Renderer* renderer) {
@@ -298,7 +190,7 @@ static void glBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, int32_t p
         require(targetSurfaceId >= 0 && (uint32_t) targetSurfaceId < gl->surfaceCount);
         require(gl->surfaces[targetSurfaceId] != 0);
         glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[targetSurfaceId]);
-        glApplyViewport(gl, portX, portY, portW, portH);
+        GLCommon_applyViewport(gl, portX, portY, portW, portH);
     }
 
     //I dunno hopefully this is at least somewhat correct...
