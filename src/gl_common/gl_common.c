@@ -165,6 +165,89 @@ void GLCommon_beginView(
     glActiveTexture(activeTexture);
 }
 
+void GLCommon_endView() {
+    glDisable(GL_SCISSOR_TEST);
+}
+
+void GLCommon_beginGUI(
+    Renderer* renderer, int32_t targetSurfaceId, GLuint hostFramebuffer, GLuint activeTexture, GLApplyProjectionFunc glApplyProjection,
+    int32_t guiW, int32_t guiH, int32_t portX, int32_t portY, int32_t portW, int32_t portH
+) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+    if (targetSurfaceId == RENDER_TARGET_HOST_FRAMEBUFFER) {
+        glBindFramebuffer(GL_FRAMEBUFFER, hostFramebuffer);
+        int32_t sx, sy, ex, ey;
+        GLCommon_computeLetterbox(guiW, guiH, portW, portH, &sx, &sy, &ex, &ey);
+        glViewport(sx, sy, ex - sx, ey - sy);
+        glScissor(sx, sy, ex - sx, ey - sy);
+    } else {
+        require(targetSurfaceId >= 0 && (uint32_t) targetSurfaceId < gl->surfaceCount);
+        require(gl->surfaces[targetSurfaceId] != 0);
+        int32_t glPortY = gl->gameH - portY - portH;
+        GLCommon_applyViewport(gl, portX, glPortY, portW, portH);
+    }
+
+    glEnable(GL_SCISSOR_TEST);
+
+    gl->base.cameraCurrent = GUI_CAMERA;
+    GMLCamera* camera = &renderer->runner->guiCamera;
+    camera->allocated = true;
+    camera->viewX = 0.0;
+    camera->viewY = 0.0;
+    camera->viewWidth = guiW;
+    camera->viewHeight = guiH;
+    camera->borderX = 0;
+    camera->borderY = 0;
+    camera->speedX = 0;
+    camera->speedY = 0;
+    camera->objectId = -1;
+    camera->viewAngle = 0;
+
+    Matrix4f projectionMatrix;
+    Matrix4f_Orthographic(&projectionMatrix, (float) guiW, (float) guiH, 32000.0, 0.0);
+
+    Matrix4f viewMatrix;
+    float x = (float) guiW * 0.5f;
+    float y = (float) guiH * 0.5f;
+    Matrix4f_identity(&viewMatrix);
+    Matrix4f_LookAt(&viewMatrix, x, y, -16000.0, x, y, 16000.0, 0.0, 1.0, 0.0);
+    camera->viewMatrix = viewMatrix;
+    camera->projectionMatrix = projectionMatrix;
+    glApplyProjection(renderer, &camera->viewMatrix, &camera->projectionMatrix);
+
+    glActiveTexture(activeTexture);
+}
+
+void GLCommon_setGuiProjection(Renderer *renderer, bool renderingToUserSurface, GLApplyProjectionFunc glApplyProjection, int32_t guiW, int32_t guiH) {
+    renderer->cameraCurrent = GUI_CAMERA;
+    GMLCamera* camera = &renderer->runner->guiCamera;
+    camera->allocated = true;
+    camera->viewX = 0.0;
+    camera->viewY = 0.0;
+    camera->viewWidth = guiW;
+    camera->viewHeight = guiH;
+    camera->borderX = 0;
+    camera->borderY = 0;
+    camera->speedX = 0;
+    camera->speedY = 0;
+    camera->objectId = -1;
+    camera->viewAngle = 0;
+
+    //yeah no I have no idea how to do the GUI
+    Matrix4f projectionMatrix;
+    Matrix4f_Orthographic(&projectionMatrix, (float) guiW, (float) guiH, 32000.0, 0.0);
+
+    if (renderingToUserSurface) Matrix4f_flipClipY(&projectionMatrix);
+    Matrix4f viewMatrix;
+    float x = (float) guiW * 0.5f;
+    float y = (float) guiH * 0.5f;
+    Matrix4f_identity(&viewMatrix);
+    Matrix4f_LookAt(&viewMatrix, x, y, -16000.0, x, y, 16000.0, 0.0, 1.0, 0.0);
+    camera->viewMatrix = viewMatrix;
+    camera->projectionMatrix = projectionMatrix;
+    glApplyProjection(renderer, &camera->viewMatrix, &camera->projectionMatrix);
+}
+
 // ===[ Letterbox blit ]===
 
 void GLCommon_computeLetterbox(int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH, int32_t* outStartX, int32_t* outStartY, int32_t* outEndX, int32_t* outEndY) {

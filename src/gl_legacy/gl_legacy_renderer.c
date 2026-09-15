@@ -171,56 +171,15 @@ static void glBeginView(Renderer* renderer, MAYBE_UNUSED int32_t viewX, MAYBE_UN
 }
 
 static void glEndView(MAYBE_UNUSED Renderer* renderer) {
-    glDisable(GL_SCISSOR_TEST);
+    GLCommon_endView();
 }
 
 static void glBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, int32_t portX, int32_t portY, int32_t portW, int32_t portH, int32_t targetSurfaceId) {
-    GLRenderer* gl = (GLRenderer*) renderer;
-
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    if (targetSurfaceId == RENDER_TARGET_HOST_FRAMEBUFFER) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        int32_t sx, sy, ex, ey;
-        GLCommon_computeLetterbox(guiW, guiH, portW, portH, &sx, &sy, &ex, &ey);
-        glViewport(sx, sy, ex - sx, ey - sy);
-        glEnable(GL_SCISSOR_TEST);
-        glScissor(sx, sy, ex - sx, ey - sy);
-    } else {
-        require(targetSurfaceId >= 0 && (uint32_t) targetSurfaceId < gl->surfaceCount);
-        require(gl->surfaces[targetSurfaceId] != 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[targetSurfaceId]);
-        GLCommon_applyViewport(gl, portX, portY, portW, portH);
-    }
-
-    //I dunno hopefully this is at least somewhat correct...
-    gl->base.cameraCurrent = GUI_CAMERA;
-    GMLCamera* camera = &renderer->runner->guiCamera;
-    camera->allocated = true;
-    camera->viewX = 0.0;
-    camera->viewY = 0.0;
-    camera->viewWidth = guiW;
-    camera->viewHeight = guiH;
-    camera->borderX = 0;
-    camera->borderY = 0;
-    camera->speedX = 0;
-    camera->speedY = 0;
-    camera->objectId = -1;
-    camera->viewAngle = 0;
-
-    Matrix4f projectionMatrix;
-    Matrix4f_Orthographic(&projectionMatrix, (float) guiW, (float) guiH, 32000.0, 0.0);
-
-    Matrix4f viewMatrix;
-    float x = (float) guiW * 0.5f;
-    float y = (float) guiH * 0.5f;
-    Matrix4f_identity(&viewMatrix);
-    Matrix4f_LookAt(&viewMatrix, x, y, -16000.0, x, y, 16000.0, 0.0, 1.0, 0.0);
-    camera->viewMatrix = viewMatrix;
-    camera->projectionMatrix = projectionMatrix;
-    glApplyProjection(renderer,&camera->viewMatrix,&camera->projectionMatrix);
-
-    glActiveTexture(GL_TEXTURE0);
+    GLCommon_beginGUI(
+        renderer, targetSurfaceId, 0, GL_TEXTURE0, glApplyProjection,
+        guiW, guiH, portX, portY, portW, portH
+    );
 }
 
 static void glSetGuiProjection(MAYBE_UNUSED Renderer* renderer, int32_t guiW, int32_t guiH, int32_t portW, int32_t portH, bool renderingToUserSurface) {
@@ -228,33 +187,7 @@ static void glSetGuiProjection(MAYBE_UNUSED Renderer* renderer, int32_t guiW, in
     Matrix4f_guiProjection(&projection, (float) guiW, (float) guiH, (float) portW, (float) portH);
     // GL surfaces are stored bottom-up and draw_surface samples them with vertical flip.
 
-    renderer->cameraCurrent = GUI_CAMERA;
-    GMLCamera* camera = &renderer->runner->guiCamera;
-    camera->allocated = true;
-    camera->viewX = 0.0;
-    camera->viewY = 0.0;
-    camera->viewWidth = guiW;
-    camera->viewHeight = guiH;
-    camera->borderX = 0;
-    camera->borderY = 0;
-    camera->speedX = 0;
-    camera->speedY = 0;
-    camera->objectId = -1;
-    camera->viewAngle = 0;
-
-    //yeah no I have no idea how to do the GUI
-    Matrix4f projectionMatrix;
-    Matrix4f_Orthographic(&projectionMatrix, (float) guiW, (float) guiH, 32000.0, 0.0);
-    // Flip the projection when we are rendering to a user surface so it comes back upright.
-    if (renderingToUserSurface) Matrix4f_flipClipY(&projectionMatrix);
-    Matrix4f viewMatrix;
-    float x = (float) guiW * 0.5f;
-    float y = (float) guiH * 0.5f;
-    Matrix4f_identity(&viewMatrix);
-    Matrix4f_LookAt(&viewMatrix, x, y, -16000.0, x, y, 16000.0, 0.0, 1.0, 0.0);
-    camera->viewMatrix = viewMatrix;
-    camera->projectionMatrix = projectionMatrix;
-    glApplyProjection(renderer,&camera->viewMatrix,&camera->projectionMatrix);
+    GLCommon_setGuiProjection(renderer, renderingToUserSurface, glApplyProjection, guiW, guiH);
 }
 
 static void glEndGUI(MAYBE_UNUSED Renderer* renderer) {
