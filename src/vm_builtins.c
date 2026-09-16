@@ -6686,6 +6686,42 @@ static RValue builtin_array_delete(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     return RValue_makeUndefined();
 }
 
+// array_copy(dest, dest_index, src, src_index, length) - copy values from src into dest.
+static RValue builtin_array_copy(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("array_copy", 5, RValue_makeUndefined());
+    if (args[0].type != RVALUE_ARRAY || args[0].array == nullptr)
+        return RValue_makeUndefined();
+    if (args[2].type != RVALUE_ARRAY || args[2].array == nullptr)
+        return RValue_makeUndefined();
+    GMLArray* dst = args[0].array;
+    GMLArray* src = args[2].array;
+    require(dst->type == GML_MODERN_ARRAY);
+    require(src->type == GML_MODERN_ARRAY);
+    int32_t dstIndex = (int32_t)RValue_toReal(args[1]);
+    int32_t srcIndex = (int32_t)RValue_toReal(args[3]);
+    int32_t length = (int32_t)RValue_toReal(args[4]);
+    if (dstIndex < 0) dstIndex = 0;
+    if (srcIndex < 0) srcIndex = 0;
+    if (length <= 0) return RValue_makeUndefined();
+    // clamp source range
+    if (srcIndex >= src->modern.length)
+        return RValue_makeUndefined();
+    if (length > src->modern.length - srcIndex)
+        length = src->modern.length - srcIndex;
+    GMLArray_growTo(dst, dstIndex + length);
+     // temp buffer handles array_copy when the source and destination overlap
+    RValue* temp = (RValue*)safeCalloc(length, sizeof(RValue));
+    repeat(length, i) {
+        temp[i] = RValue_makeIndependent(src->modern.data[srcIndex + i]);
+    }
+    repeat(length, i) {
+        RValue_free(&dst->modern.data[dstIndex + i]);
+        dst->modern.data[dstIndex + i] = temp[i];
+    }
+    free(temp);
+    return RValue_makeUndefined();
+}
+
 static VMContext* g_arraySortCtx;
 static int32_t g_arraySortCodeIndex;
 static BuiltinFunc g_arraySortBuiltin;
@@ -21591,6 +21627,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "array_delete", builtin_array_delete);
     VM_registerBuiltin(ctx, "array_insert", builtin_array_insert);
     VM_registerBuiltin(ctx, "array_create", builtin_array_create);
+    VM_registerBuiltin(ctx, "array_copy", builtin_array_copy);
     VM_registerBuiltin(ctx, "array_sort", builtin_array_sort);
 
     // Steam stubs
