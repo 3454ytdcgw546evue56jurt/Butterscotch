@@ -6714,9 +6714,11 @@ static RValue builtin_array_copy(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
     repeat(length, i) {
         temp[i] = RValue_makeIndependent(src->modern.data[srcIndex + i]);
     }
+    {
     repeat(length, i) {
         RValue_free(&dst->modern.data[dstIndex + i]);
         dst->modern.data[dstIndex + i] = temp[i];
+    }
     }
     free(temp);
     return RValue_makeUndefined();
