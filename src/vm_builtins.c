@@ -6695,7 +6695,7 @@ static RValue builtin_array_copy(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
         return RValue_makeUndefined();
     GMLArray* dst = args[0].array;
     GMLArray* src = args[2].array;
-    require(dst->type == src->type) // don't allow legacy<->modern copies
+    require(dst->type == src->type); // don't allow legacy<->modern copies
     int32_t dstIndex = (int32_t)RValue_toReal(args[1]);
     int32_t srcIndex = (int32_t)RValue_toReal(args[3]);
     int32_t length = (int32_t)RValue_toReal(args[4]);
