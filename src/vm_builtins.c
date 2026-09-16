@@ -4908,6 +4908,35 @@ static RValue builtin_ds_list_delete(VMContext* ctx, RValue* args, int32_t argCo
     return RValue_makeUndefined();
 }
 
+static int arraySortCompareAsc(const void* a, const void* b) {
+    const RValue* ra = (const RValue*) a;
+    const RValue* rb = (const RValue*) b;
+    if (ra->type == RVALUE_STRING && rb->type == RVALUE_STRING) {
+        return strcmp(ra->string != nullptr ? ra->string : "", rb->string != nullptr ? rb->string : "");
+    }
+    GMLReal da = RValue_toReal(*ra);
+    GMLReal db = RValue_toReal(*rb);
+    if (da < db) return -1;
+    if (da > db) return 1;
+    return 0;
+}
+
+static int arraySortCompareDesc(const void* a, const void* b) {
+    return arraySortCompareAsc(b, a);
+}
+
+static RValue builtin_ds_list_sort(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    bool ascending = RValue_toBool(args[1]);
+    DsList* list = dsListGet(runner, id);
+    if (list == nullptr) return RValue_makeUndefined();
+    int len = arrlen(list->items);
+    if (len < 2) return RValue_makeUndefined();
+    qsort(list->items, len, sizeof(RValue), ascending ? arraySortCompareAsc : arraySortCompareDesc);
+    return RValue_makeUndefined();
+}
+
 static RValue builtin_ds_list_empty(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -6660,23 +6689,6 @@ static RValue builtin_array_delete(MAYBE_UNUSED VMContext* ctx, RValue* args, in
 static VMContext* g_arraySortCtx;
 static int32_t g_arraySortCodeIndex;
 static BuiltinFunc g_arraySortBuiltin;
-
-static int arraySortCompareAsc(const void* a, const void* b) {
-    const RValue* ra = (const RValue*) a;
-    const RValue* rb = (const RValue*) b;
-    if (ra->type == RVALUE_STRING && rb->type == RVALUE_STRING) {
-        return strcmp(ra->string != nullptr ? ra->string : "", rb->string != nullptr ? rb->string : "");
-    }
-    GMLReal da = RValue_toReal(*ra);
-    GMLReal db = RValue_toReal(*rb);
-    if (da < db) return -1;
-    if (da > db) return 1;
-    return 0;
-}
-
-static int arraySortCompareDesc(const void* a, const void* b) {
-    return arraySortCompareAsc(b, a);
-}
 
 static int arraySortCompareCustom(const void* a, const void* b) {
     RValue callArgs[2];
@@ -21495,6 +21507,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "ds_list_add", builtin_ds_list_add);
     VM_registerBuiltin(ctx, "ds_list_insert", builtin_ds_list_insert);
     VM_registerBuiltin(ctx, "ds_list_delete", builtin_ds_list_delete);
+    VM_registerBuiltin(ctx, "ds_list_sort", builtin_ds_list_sort);
     VM_registerBuiltin(ctx, "ds_list_empty", builtin_ds_list_empty);
     VM_registerBuiltin(ctx, "ds_list_size", builtin_ds_list_size);
     VM_registerBuiltin(ctx, "ds_list_find_index", builtin_ds_list_find_index);
