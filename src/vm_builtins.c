@@ -6695,29 +6695,34 @@ static RValue builtin_array_copy(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
         return RValue_makeUndefined();
     GMLArray* dst = args[0].array;
     GMLArray* src = args[2].array;
-    require(dst->type == GML_MODERN_ARRAY);
-    require(src->type == GML_MODERN_ARRAY);
+    require(dst->type == src->type) // don't allow legacy<->modern copies
     int32_t dstIndex = (int32_t)RValue_toReal(args[1]);
     int32_t srcIndex = (int32_t)RValue_toReal(args[3]);
     int32_t length = (int32_t)RValue_toReal(args[4]);
     if (dstIndex < 0) dstIndex = 0;
     if (srcIndex < 0) srcIndex = 0;
     if (length <= 0) return RValue_makeUndefined();
+    int32_t srcLen = GMLArray_length1D(src);
     // clamp source range
-    if (srcIndex >= src->modern.length)
+    if (srcIndex >= srcLen)
         return RValue_makeUndefined();
-    if (length > src->modern.length - srcIndex)
-        length = src->modern.length - srcIndex;
+    if (length > srcLen - srcIndex)
+        length = srcLen - srcIndex;
     GMLArray_growTo(dst, dstIndex + length);
      // temp buffer handles array_copy when the source and destination overlap
     RValue* temp = (RValue*)safeCalloc(length, sizeof(RValue));
     repeat(length, i) {
-        temp[i] = RValue_makeIndependent(src->modern.data[srcIndex + i]);
+        temp[i] = RValue_makeIndependent(GMLArray_get(src, srcIndex + i));
     }
     {
     repeat(length, i) {
-        RValue_free(&dst->modern.data[dstIndex + i]);
-        dst->modern.data[dstIndex + i] = temp[i];
+        RValue* slot = GMLArray_slot(dst, dstIndex + i);
+        if (slot != nullptr) {
+            RValue_free(slot);
+            *slot = temp[i];
+        } else {
+            RValue_free(&temp[i]);
+        }
     }
     }
     free(temp);
