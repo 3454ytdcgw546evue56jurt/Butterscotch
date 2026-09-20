@@ -3208,7 +3208,17 @@ static RValue executeLoop(VMContext* ctx) {
                 }
                 break;
             }
-            case OP_DIV: handleDiv(ctx, instr); break;
+            case OP_DIV: {
+                RValue* slotA = &ctx->stack.slots[ctx->stack.top - 2];
+                RValue* slotB = &ctx->stack.slots[ctx->stack.top - 1];
+                if (slotA->type == RVALUE_REAL && slotB->type == RVALUE_REAL) {
+                    slotA->real = slotA->real / slotB->real;
+                    ctx->stack.top--;
+                } else {
+                    handleDiv(ctx, instr);
+                }
+                break;
+            }
             case OP_REM: handleRem(ctx, instr); break;
             case OP_MOD: handleMod(ctx, instr); break;
 
@@ -3220,8 +3230,38 @@ static RValue executeLoop(VMContext* ctx) {
             case OP_SHR: handleShr(ctx, instr); break;
 
             // Unary
-            case OP_NEG: handleNeg(ctx, instr); break;
-            case OP_NOT: handleNot(ctx, instr); break;
+            case OP_NEG: {
+                RValue* slot = &ctx->stack.slots[ctx->stack.top - 1];
+                switch (slot->type) {
+                    case RVALUE_REAL:
+                        slot->real = -slot->real;
+                        break;
+                    case RVALUE_INT32:
+                        slot->int32 = -slot->int32;
+                        break;
+                    default:
+                        handleNeg(ctx, instr); 
+                        break;
+                }
+                slot->gmlStackType = instrType1(instr);
+                break;
+            }
+            case OP_NOT: {
+                RValue* slot = &ctx->stack.slots[ctx->stack.top - 1];
+                uint8_t resultType = instrType1(instr);                
+                if (slot->type == RVALUE_INT32) {
+                    if (resultType == GML_TYPE_BOOL) {
+                        slot->int32 = (slot->int32 == 0) ? 1 : 0;
+                        slot->type = RVALUE_BOOL;
+                    } else {
+                        slot->int32 = ~slot->int32;
+                    }
+                    slot->gmlStackType = resultType;
+                } else {
+                    handleNot(ctx, instr);
+                }
+                break;
+            }
 
             // Type conversion
             case OP_CONV: {
@@ -3294,6 +3334,23 @@ static RValue executeLoop(VMContext* ctx) {
                 if (slotA->type == RVALUE_INT32 && slotB->type == RVALUE_INT32) {
                     int32_t a = slotA->int32;
                     int32_t b = slotB->int32;
+                    bool result;
+                    switch (instrCmpKind(instr)) {
+                        case CMP_LT:  result = b > a;  break;
+                        case CMP_LTE: result = b >= a; break;
+                        case CMP_EQ:  result = a == b; break;
+                        case CMP_NEQ: result = a != b; break;
+                        case CMP_GTE: result = a >= b; break;
+                        case CMP_GT:  result = a > b;  break;
+                        default:      result = false;  break;
+                    }
+                    slotA->int32 = result ? 1 : 0;
+                    slotA->type = RVALUE_BOOL;
+                    slotA->gmlStackType = GML_TYPE_BOOL;
+                    ctx->stack.top--;
+                } else if (slotA->type == RVALUE_REAL && slotB->type == RVALUE_REAL) {
+                    GMLReal a = slotA->real;
+                    GMLReal b = slotB->real;
                     bool result;
                     switch (instrCmpKind(instr)) {
                         case CMP_LT:  result = b > a;  break;
