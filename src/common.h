@@ -77,7 +77,7 @@
     #define YIELD() ((void)0)
 #endif
 
-#if defined (__GNUC__) || defined(__clang__) || defined(__TINYC__)
+#if (defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 95))) || defined(__clang__) || defined(__TINYC__)
     #define RESTRICT __restrict__
 #elif defined(_MSC_VER) && _MSC_VER >= 1400
     #define RESTRICT __restrict
