@@ -3294,19 +3294,23 @@ static RValue executeLoop(VMContext* ctx) {
             case OP_CMP: {
                 RValue* slotA = &slots[ctx->stack.top - 2];
                 RValue* slotB = &slots[ctx->stack.top - 1];
+                uint8_t aType = slotA->type;
+                uint8_t bType = slotB->type;
 
-                // Inline fast path for INT32/INT32
-                if (slotA->type == RVALUE_INT32 && slotB->type == RVALUE_INT32) {
-                    int32_t a = slotA->int32;
-                    int32_t b = slotB->int32;
+                // Inline fast path for INT32|REAL/INT32|REAL
+                if ((aType == RVALUE_INT32 || aType == RVALUE_REAL) && (bType == RVALUE_INT32 || bType == RVALUE_REAL)) {
+                    GMLReal a = aType == RVALUE_INT32 ? (GMLReal)slotA->int32 : slotA->real;
+                    GMLReal b = bType == RVALUE_INT32 ? (GMLReal)slotB->int32 : slotB->real;
+                    GMLReal diff = a - b;
+                    int cmp = (GMLReal_fabs(diff) <= GML_MATH_EPSILON) ? 0 : (diff < 0) ? -1 : 1;
                     bool result;
                     switch (instrCmpKind(instr)) {
-                        case CMP_LT:  result = b > a;  break;
-                        case CMP_LTE: result = b >= a; break;
-                        case CMP_EQ:  result = a == b; break;
-                        case CMP_NEQ: result = a != b; break;
-                        case CMP_GTE: result = a >= b; break;
-                        case CMP_GT:  result = a > b;  break;
+                        case CMP_LT:  result = cmp < 0;  break;
+                        case CMP_LTE: result = cmp <= 0; break;
+                        case CMP_EQ:  result = cmp == 0; break;
+                        case CMP_NEQ: result = cmp != 0; break;
+                        case CMP_GTE: result = cmp >= 0; break;
+                        case CMP_GT:  result = cmp > 0;  break;
                         default:      result = false;  break;
                     }
                     slotA->int32 = result ? 1 : 0;
