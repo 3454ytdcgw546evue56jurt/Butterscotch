@@ -17740,6 +17740,121 @@ static RValue builtin_json_encode(VMContext* ctx, RValue* args, int32_t argCount
     return RValue_makeOwnedString(result);
 }
 
+// Modified jsonDecodeValue for builtin_json_parse
+static RValue jsonParseValue(VMContext* ctx, JsonValue* json, int32_t Filter_func_ref) {
+    if (json == nullptr) return RValue_makeUndefined();
+
+    switch (json->type) {
+        case JSON_NULL:
+            return RValue_makeUndefined();
+        case JSON_BOOL:
+            return RValue_makeBool(json->boolValue);
+        case JSON_NUMBER:
+            return RValue_makeReal((GMLReal)json->numberValue);
+        case JSON_STRING:
+            return RValue_makeOwnedString(safeStrdup(json->stringValue ? json->stringValue : ""));
+        case JSON_ARRAY: {
+            // For arrays, create a GML ARRAY
+            int len = JsonReader_arrayLength(json);
+            GMLArray *list = GMLArray_create(ctx->dataWin,len);
+            for (int i = 0; i < len; i++) {
+                JsonValue* item = JsonReader_getArrayElement(json, i);
+                RValue val = jsonParseValue(ctx, item, Filter_func_ref);
+                
+                if(Filter_func_ref != -1)
+                {
+                    RValue Filter_func_arg[1];
+                    Filter_func_arg[0] = RValue_makeInt32(i);
+                    Filter_func_arg[1] = val;
+                    RValue_free(&val);
+
+                    val = VM_callCodeIndex(ctx, Filter_func_ref, Filter_func_arg, 2);
+
+                    RValue_free(&Filter_func_arg[0]);
+                    RValue_free(&Filter_func_arg[1]);
+                }
+
+                if (list != nullptr) {
+                    GMLArray_set(list,i ,val);
+                } else {
+                    RValue_free(&val);
+                }
+            }
+            return RValue_makeArray(list);
+        }
+        case JSON_OBJECT: {
+            // For structs, Runcreate a GML Struct
+            Instance *instance = Runner_createStruct(ctx->runner);
+            int len = JsonReader_objectLength(json);
+            for (int i = 0; i < len; i++) {
+                const char* key = JsonReader_getJsonKeyByIndex(json, i);
+                JsonValue* valJson = JsonReader_getJsonValueByIndex(json, i);
+                RValue val = jsonParseValue(ctx, valJson, Filter_func_ref);
+
+                if(Filter_func_ref != -1)
+                {
+                    RValue Filter_func_arg[1];
+                    Filter_func_arg[0] = RValue_makeInt32(i);
+                    Filter_func_arg[1] = RValue_makeString(key);
+                    RValue_free(&val);
+
+                    val = VM_callCodeIndex(ctx, Filter_func_ref, Filter_func_arg, 2);
+
+                    RValue_free(&Filter_func_arg[0]);
+                    RValue_free(&Filter_func_arg[1]);
+                }
+
+                if (instance != nullptr) {
+                    char* keyCopy = safeStrdup(key);
+                    VM_structSet(ctx, instance , keyCopy, val,-1);
+                } else {
+                    RValue_free(&val);
+                }
+            }
+            return RValue_makeStructAndIncRef(instance);
+        }
+        default:
+            return RValue_makeUndefined();
+    }
+}
+static RValue builtin_json_parse(VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("json_parse", 1, RValue_makeUndefined());
+    
+    if(args[0].type != RVALUE_STRING) {printf("builtin_json_parse arg 1 is not an string\n");return RValue_makeUndefined();}
+    
+    const char* content = args[0].string;
+
+    int32_t Filter_func = -1;
+    if(argCount > 0)
+    {
+        switch(args[1].type)
+        {
+            case RVALUE_INT32:
+                Filter_func = args[1].int32;
+            break;
+            #ifndef RVALUE_INT64
+                case RVALUE_INT64:
+                    Filter_func = args[1].int64;
+                break;
+            #endif
+            case RVALUE_METHOD:
+                Filter_func = args[1].assetIndex;
+            break;
+            case RVALUE_ASSETREF:
+                Filter_func = args[1].method->codeIndex;
+            break;
+        }
+    }
+
+    JsonValue* json = JsonReader_parse(content);
+
+    RValue result = jsonParseValue(ctx, json, Filter_func);
+
+    JsonReader_free(json);
+
+    return result;
+}
+
 // Recursively decode a JSON value into a GML value
 static RValue jsonDecodeValue(VMContext* ctx, JsonValue* json) {
     if (json == nullptr) return RValue_makeUndefined();
@@ -22351,6 +22466,11 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "layer_background_destroy", builtin_layer_background_destroy);
     VM_registerBuiltin(ctx, "layer_element_move", builtin_layer_element_move);
 
+    //json
+    VM_registerBuiltin(ctx, "json_decode", builtin_json_decode);
+    VM_registerBuiltin(ctx, "json_encode", builtin_json_encode);
+    VM_registerBuiltin(ctx, "json_parse", builtin_json_parse);
+
     // GMS2 internal
     VM_registerBuiltin(ctx, "@@NewGMLArray@@", builtin_NewGMLArray);
     VM_registerBuiltin(ctx, "@@This@@", builtin_This);
@@ -22581,8 +22701,6 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "alarm_set", builtin_alarm_set);
     VM_registerBuiltin(ctx, "alarm_get", builtin_alarm_get);
     VM_registerBuiltin(ctx, "string_hash_to_newline", builtin_string_hash_to_newline);
-    VM_registerBuiltin(ctx, "json_decode", builtin_json_decode);
-    VM_registerBuiltin(ctx, "json_encode", builtin_json_encode);
     VM_registerBuiltin(ctx, "font_add_sprite", builtin_font_add_sprite);
     VM_registerBuiltin(ctx, "font_add_sprite_ext", builtin_font_add_sprite_ext);
     VM_registerBuiltin(ctx, "font_exists", builtin_font_exists);
