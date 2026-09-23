@@ -12165,6 +12165,19 @@ static RValue builtin_sprite_set_bbox_mode(VMContext* ctx, RValue* args, int32_t
     return RValue_makeUndefined();
 }
 
+static RValue builtin_sprite_set_bbox(VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("sprite_set_bbox", 4, RValue_makeUndefined());
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    
+    if (0 <= spriteIndex && (uint32_t) spriteIndex < ctx->dataWin->sprt.count) {
+        ctx->dataWin->sprt.sprites[spriteIndex].marginLeft = (int32_t) RValue_toReal(args[1]);
+        ctx->dataWin->sprt.sprites[spriteIndex].marginTop = (int32_t) RValue_toReal(args[2]);
+        ctx->dataWin->sprt.sprites[spriteIndex].marginRight = (int32_t) RValue_toReal(args[3]);
+        ctx->dataWin->sprt.sprites[spriteIndex].marginBottom = (int32_t) RValue_toReal(args[4]);
+    }
+    return RValue_makeUndefined();
+}
+
 // sprite_set_offset(sprite_index, xoff, yoff)
 static RValue builtin_sprite_set_offset(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
@@ -22132,6 +22145,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "sprite_get_bbox_top", builtin_sprite_get_bbox_top);
     VM_registerBuiltin(ctx, "sprite_get_bbox_bottom", builtin_sprite_get_bbox_bottom);
     VM_registerBuiltin(ctx, "sprite_set_bbox_mode", builtin_sprite_set_bbox_mode);
+    VM_registerBuiltin(ctx, "sprite_set_bbox", builtin_sprite_set_bbox);
     VM_registerBuiltin(ctx, "sprite_set_offset", builtin_sprite_set_offset);
     VM_registerBuiltin(ctx, "sprite_create_from_surface", builtin_sprite_create_from_surface);
     VM_registerBuiltin(ctx, "sprite_delete", builtin_sprite_delete);
