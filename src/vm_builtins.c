@@ -12166,7 +12166,7 @@ static RValue builtin_sprite_set_bbox_mode(VMContext* ctx, RValue* args, int32_t
 }
 
 static RValue builtin_sprite_set_bbox(VMContext* ctx, RValue* args, int32_t argCount) {
-    REQUIRE_ARGC_AT_LEAST("sprite_set_bbox", 4, RValue_makeUndefined());
+    REQUIRE_ARGC_AT_LEAST("sprite_set_bbox", 5, RValue_makeUndefined());
     int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
     
     if (0 <= spriteIndex && (uint32_t) spriteIndex < ctx->dataWin->sprt.count) {
