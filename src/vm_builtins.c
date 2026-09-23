@@ -11729,6 +11729,23 @@ static RValue builtin_motion_add(VMContext* ctx, RValue* args, int32_t argCount)
     return RValue_makeUndefined();
 }
 
+static RValue builtin_motion_set(VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("motion_set", 2, RValue_makeUndefined());
+
+    Instance* inst = ctx->currentInstance;
+    if (inst == nullptr) return RValue_makeUndefined();
+
+    GMLReal dir = RValue_toReal(args[0]);
+    GMLReal spd = RValue_toReal(args[1]);
+    GMLReal rad = dir * (M_PI / 180.0);
+
+    inst->hspeed = (float)(GMLReal_cos(rad) * spd);
+    inst->vspeed = (float)(-GMLReal_sin(rad) * spd);
+    Instance_computeSpeedFromComponents(inst);
+
+    return RValue_makeUndefined();
+}
+
 // merge_color(col1, col2, amount) - lerps between two colors
 static RValue builtin_merge_color(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t col1 = (int32_t) RValue_toColour(args[0]);
@@ -22044,6 +22061,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
 
     // Motion
     VM_registerBuiltin(ctx, "motion_add", builtin_motion_add);
+    VM_registerBuiltin(ctx, "motion_set", builtin_motion_set);
 
     // Color
     VM_registerBuiltin(ctx, "merge_color", builtin_merge_color);
