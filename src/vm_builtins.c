@@ -17855,6 +17855,90 @@ static RValue builtin_json_parse(VMContext* ctx, RValue* args, int32_t argCount)
     return result;
 }
 
+//Modified jsonEncodeValue
+void JsonStringifyValue(VMContext* ctx,bool useFloatMarkers ,JsonWriter *writer, RValue Value, int32_t Filter_func_ref) {
+    switch (Value.type) {
+        case RVALUE_UNDEFINED: {
+            JsonWriter_null(writer);
+        }
+        break;
+        case RVALUE_REAL: {
+            jsonEncodeReal(writer, Value.real, useFloatMarkers);
+        }
+        break;
+        case RVALUE_INT32: {
+            JsonWriter_int(writer, Value.int32);
+        }
+        break;
+        #ifndef NO_RVALUE_INT64
+            case RVALUE_INT64: {
+                JsonWriter_int(writer, Value.int64);
+            }
+            break;
+        #endif
+        case RVALUE_BOOL: {
+            JsonWriter_bool(writer, Value.int32 != 0);
+        }
+        break;
+        case RVALUE_STRING: {
+            JsonWriter_string(writer, Value.string);
+        }
+        break;
+        case RVALUE_ARRAY: {
+            JsonWriter_beginArray(writer);
+            if(Value.array != nullptr) {
+                int32_t length = GMLArray_length1D(Value.array);
+                repeat(length, i) {
+                    RValue slot = *GMLArray_slot(Value.array, i);
+                    JsonStringifyValue(ctx,useFloatMarkers,writer,slot,Filter_func_ref);
+                }
+            }
+            JsonWriter_endArray(writer);
+            break;
+        }
+        case RVALUE_STRUCT: {
+            Instance *structInst = resolveInstanceValue(ctx->runner, Value);
+            IntRValueHashMap *struct_variables = &structInst->selfVars;
+            int32_t struct_variables_count = struct_variables->count;
+
+            RValue val;
+            char *valname;
+
+            JsonWriter_beginObject(writer);
+            for(int i = 0;i<struct_variables_count;i++)
+            {
+                val = struct_variables->entries[i].value;
+                valname = VM_getVariableNameByVarId(ctx, struct_variables->entries[i].key);
+                JsonWriter_key(writer,valname);
+                JsonStringifyValue(ctx,useFloatMarkers , writer, val, Filter_func_ref);
+            }
+            JsonWriter_endObject(writer);
+        }
+        break;
+        default: {
+            printf("JsonStringifyValue unknown value type\n");
+        }
+    }
+}
+
+static RValue builtin_json_stringify(VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("json_stringify", 1, RValue_makeOwnedString(safeStrdup("{}")));
+    
+    if(args[0].type != RVALUE_STRUCT && args[0].type != RVALUE_ARRAY && args[0].type != RVALUE_INT32) {printf("json_stringify: arg 1 is not a struct or an array\n");return RValue_makeOwnedString(safeStrdup("{}"));}
+
+    //TODO : Implement prettify
+    //It is a second agrument
+    
+    bool useFloatMarkers = DataWin_isVersionAtLeast(ctx->dataWin, 2023, 2, 0, 0);
+    JsonWriter writer = JsonWriter_create();
+
+    JsonStringifyValue(ctx, useFloatMarkers, &writer, args[0], -1);
+
+    char* result = JsonWriter_copyOutput(&writer);
+    JsonWriter_free(&writer);
+    return RValue_makeOwnedString(result);
+}
+
 // Recursively decode a JSON value into a GML value
 static RValue jsonDecodeValue(VMContext* ctx, JsonValue* json) {
     if (json == nullptr) return RValue_makeUndefined();
@@ -22470,6 +22554,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "json_decode", builtin_json_decode);
     VM_registerBuiltin(ctx, "json_encode", builtin_json_encode);
     VM_registerBuiltin(ctx, "json_parse", builtin_json_parse);
+    VM_registerBuiltin(ctx, "json_stringify", builtin_json_stringify);
 
     // GMS2 internal
     VM_registerBuiltin(ctx, "@@NewGMLArray@@", builtin_NewGMLArray);
