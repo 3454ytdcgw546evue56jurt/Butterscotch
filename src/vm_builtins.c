@@ -4843,6 +4843,21 @@ static RValue builtin_ds_map_copy(VMContext* ctx, RValue* args, int32_t argCount
     return RValue_makeUndefined();
 }
 
+static RValue builtin_ds_map_keys_to_array(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    DsMapEntry** map = dsMapGet(runner, id);
+    if (map == nullptr || *map == nullptr) return RValue_makeUndefined();
+    bool inPlace = argCount >= 2;
+    GMLArray* arr = inPlace ? args[1].array : GMLArray_create(ctx->dataWin, (int32_t) shlen(*map));
+
+    for (int32_t i = 0; i < shlen(*map); i++) {
+        *GMLArray_slot(arr, i) = RValue_makeOwnedString(safeStrdup((*map)[i].key));
+    }
+
+    return inPlace ? RValue_makeArrayWeak(arr) : RValue_makeArray(arr);
+}
+
 // ===[ DS_LIST FUNCTIONS ]===
 
 static RValue builtin_ds_list_create(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -21552,7 +21567,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "ds_map_find_next", builtin_ds_map_find_next);
     VM_registerBuiltin(ctx, "ds_map_size", builtin_ds_map_size);
     VM_registerBuiltin(ctx, "ds_map_destroy", builtin_ds_map_destroy);
-    VM_registerBuiltin(ctx, "ds_map_copy", builtin_ds_map_copy);    
+    VM_registerBuiltin(ctx, "ds_map_copy", builtin_ds_map_copy);
+    VM_registerBuiltin(ctx, "ds_map_keys_to_array", builtin_ds_map_keys_to_array);
     VM_registerBuiltin(ctx, "ds_map_read", builtin_ds_map_read);
     VM_registerBuiltin(ctx, "ds_map_write", builtin_ds_map_write);
 
