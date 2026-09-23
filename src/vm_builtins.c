@@ -15280,6 +15280,39 @@ static bool isValidLayerSpriteElement(RuntimeLayerElement* element) {
     return true;
 }
 
+static RValue builtin_layer_sprite_create(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("layer_sprite_create", 4, RValue_makeUndefined());
+    Runner* runner = ctx->runner;
+    int32_t layerId = resolveLayerIdArg(runner, args[0]);
+    GMLReal x = RValue_toReal(args[1]);
+    GMLReal y = RValue_toReal(args[2]);
+    int32_t spriteIndex = RValue_toInt32(args[3]);
+    
+    RuntimeLayer* runtimeLayer = Runner_findRuntimeLayerById(runner, layerId);
+    if (runtimeLayer == nullptr) return RValue_makeReal(-1.0);
+    
+    RuntimeSpriteElement* spr = (RuntimeSpriteElement *)safeMalloc(sizeof(RuntimeSpriteElement));
+    spr->spriteIndex = spriteIndex;
+    spr->x = x;
+    spr->y = y;
+    spr->scaleX = 1.0f;
+    spr->scaleY = 1.0f;
+    spr->color = 0xFFFFFFFFu;
+    spr->animationSpeed = 1.0f;
+    spr->animationSpeedType = 0;
+    spr->frameIndex = 0.0f;
+    spr->rotation = 0.0f;
+    RuntimeLayerElement el = {0};
+    el.id = Runner_getNextLayerId(runner);
+    el.type = RuntimeLayerElementType_Sprite;
+    el.visible = true;
+    el.alpha = 1.0f;
+    el.blend = 0xFFFFFFu;
+    el.spriteElement = spr;
+    arrput(runtimeLayer->elements, el);
+    return RValue_makeReal((GMLReal) el.id);
+}
+
 static RValue builtin_layer_sprite_exists(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t layerId = resolveLayerIdArg(ctx->runner, args[0]);
     int32_t elementId = RValue_toInt32(args[1]);
@@ -22214,6 +22247,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
 #endif
     VM_registerBuiltin(ctx, "layer_get_element_type", builtin_layer_get_element_type);
     VM_registerBuiltin(ctx, "layer_get_element_layer", builtin_layer_get_element_layer);
+    VM_registerBuiltin(ctx, "layer_sprite_create", builtin_layer_sprite_create);
     VM_registerBuiltin(ctx, "layer_sprite_exists", builtin_layer_sprite_exists);
     VM_registerBuiltin(ctx, "layer_sprite_get_id", builtin_layer_sprite_get_id);
     VM_registerBuiltin(ctx, "layer_sprite_get_sprite", builtin_layer_sprite_get_sprite);
