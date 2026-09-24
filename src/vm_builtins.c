@@ -16220,7 +16220,12 @@ static RValue builtin_SetStatic(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE
 // @@NewGMLObject@@(methodRef, ...args) - GMS2 internal function that allocates a fresh struct instance, runs the constructor method against it, and returns the new instance ID.
 // We reuse Instance (with objectIndex = STRUCT_OBJECT_INDEX) the same way globalScopeInstance is used for GLOB scripts, instead of introducing a separate struct type.
 static RValue builtin_NewGMLObject(VMContext* ctx, RValue* args, int32_t argCount) {
-    REQUIRE_ARGC_AT_LEAST("@@NewGMLObject@@", 1, RValue_makeUndefined());
+    
+    if(argCount == 0)
+    {
+        Instance* structInst = Runner_createStruct(ctx->runner);
+        return RValue_makeStructAndIncRef(structInst);
+    }
 
     Runner* runner = ctx->runner;
     int32_t codeIndex;
@@ -17851,12 +17856,16 @@ static RValue jsonParseValue(VMContext* ctx, JsonValue* json, int32_t Filter_fun
     switch (json->type) {
         case JSON_NULL:
             return RValue_makeUndefined();
+        break;
         case JSON_BOOL:
             return RValue_makeBool(json->boolValue);
+        break;
         case JSON_NUMBER:
-            return RValue_makeReal((GMLReal)json->numberValue);
+            return RValue_makeReal(json->numberValue);
+        break;
         case JSON_STRING:
-            return RValue_makeOwnedString(safeStrdup(json->stringValue ? json->stringValue : ""));
+            return RValue_makeString(safeStrdup(json->stringValue ? json->stringValue : ""));
+        break;
         case JSON_ARRAY: {
             // For arrays, create a GML ARRAY
             int len = JsonReader_arrayLength(json);
@@ -17873,9 +17882,6 @@ static RValue jsonParseValue(VMContext* ctx, JsonValue* json, int32_t Filter_fun
                     RValue_free(&val);
 
                     val = VM_callCodeIndex(ctx, Filter_func_ref, Filter_func_arg, 2);
-
-                    RValue_free(&Filter_func_arg[0]);
-                    RValue_free(&Filter_func_arg[1]);
                 }
 
                 if (list != nullptr) {
@@ -17886,8 +17892,9 @@ static RValue jsonParseValue(VMContext* ctx, JsonValue* json, int32_t Filter_fun
             }
             return RValue_makeArray(list);
         }
+        break;
         case JSON_OBJECT: {
-            // For structs, Runcreate a GML Struct
+            // For structs, create a GML Struct
             Instance *instance = Runner_createStruct(ctx->runner);
             int len = JsonReader_objectLength(json);
             for (int i = 0; i < len; i++) {
@@ -17898,28 +17905,29 @@ static RValue jsonParseValue(VMContext* ctx, JsonValue* json, int32_t Filter_fun
                 if(Filter_func_ref != -1)
                 {
                     RValue Filter_func_arg[1];
-                    Filter_func_arg[0] = RValue_makeInt32(i);
-                    Filter_func_arg[1] = RValue_makeString(key);
+                    Filter_func_arg[0] = RValue_makeString(safeStrdup(key));
+                    Filter_func_arg[1] = val;
                     RValue_free(&val);
 
                     val = VM_callCodeIndex(ctx, Filter_func_ref, Filter_func_arg, 2);
-
-                    RValue_free(&Filter_func_arg[0]);
-                    RValue_free(&Filter_func_arg[1]);
                 }
 
                 if (instance != nullptr) {
-                    char* keyCopy = safeStrdup(key);
-                    VM_structSet(ctx, instance , keyCopy, val,-1);
+                    int32_t varID = VM_getOrAllocateVarID(ctx, key);
+                    Instance_setSelfVar(instance, varID, val);
                 } else {
                     RValue_free(&val);
                 }
             }
             return RValue_makeStructAndIncRef(instance);
         }
+        break;
         default:
             return RValue_makeUndefined();
+        break;
     }
+
+    return RValue_makeUndefined();
 }
 static RValue builtin_json_parse(VMContext* ctx, RValue* args, int32_t argCount) {
     REQUIRE_ARGC_AT_LEAST("json_parse", 1, RValue_makeUndefined());
@@ -17955,6 +17963,8 @@ static RValue builtin_json_parse(VMContext* ctx, RValue* args, int32_t argCount)
     RValue result = jsonParseValue(ctx, json, Filter_func);
 
     JsonReader_free(json);
+
+    printf("Json parse result: %s \n",RValue_toStringFancy(result, ctx->dataWin));
 
     return result;
 }
@@ -17998,8 +18008,8 @@ void JsonStringifyValue(VMContext* ctx,bool useFloatMarkers ,JsonWriter *writer,
                 }
             }
             JsonWriter_endArray(writer);
-            break;
         }
+        break;
         case RVALUE_STRUCT: {
             Instance *structInst = resolveInstanceValue(ctx->runner, Value);
             IntRValueHashMap *struct_variables = &structInst->selfVars;
@@ -18022,6 +18032,7 @@ void JsonStringifyValue(VMContext* ctx,bool useFloatMarkers ,JsonWriter *writer,
         default: {
             printf("JsonStringifyValue unknown value type\n");
         }
+        break;
     }
 }
 
