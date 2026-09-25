@@ -3191,6 +3191,7 @@ Renderer* GsRenderer_create(GSGLOBAL* gsGlobal, int64_t eeAtlasCacheMiB) {
     gsVtable.surfaceFree = gsSurfaceFree;
     gsVtable.surfaceCopy = gsSurfaceCopy;
     gsVtable.surfaceGetPixels = gsSurfaceGetPixels;
+    gsVtable.surfaceUploadPixels = nullptr;
     gsVtable.spriteGetTexture = gsSpriteGetTexture;
     gsVtable.surfaceGetTexture = gsSurfaceGetTexture;
     gsVtable.textureGetTexelWidth = gsTextureGetTexelWidth;
